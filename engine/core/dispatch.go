@@ -1,3 +1,4 @@
+// Package core contains the in-memory experiment model and dispatch logic.
 package core
 
 import (
@@ -6,12 +7,16 @@ import (
 	"github.com/peterrk/simple-abtest/utils"
 )
 
+// Group represents a single traffic group within a segment.
+// Bitmap encodes the 0-999 slots that belong to this group.
 type Group struct {
 	Name   string
 	Bitmap [125]byte
 	Config string
 }
 
+// Segment represents a contiguous traffic range and its groups.
+// Seed is used to hash keys into the 0-999 bitmap space.
 type Segment struct {
 	Range struct {
 		Begin uint32
@@ -21,18 +26,23 @@ type Segment struct {
 	Groups []Group
 }
 
+// Layer is a logical experiment layer composed of multiple segments.
+// ForceHit can override the normal dispatch result for specific keys.
 type Layer struct {
 	Name     string
 	Segments []Segment
 	ForceHit map[string]*Group
 }
 
+// Experiment describes a full experiment including an optional filter,
+// a global seed for slotting and one or more layers.
 type Experiment struct {
 	Filter []ExprNode
 	Seed   uint32
 	Layers []Layer
 }
 
+// locate returns the first group whose bitmap contains the hashed slot of key.
 func (s *Segment) locate(key string) *Group {
 	slot := Hash64(uint64(s.Seed), utils.UnsafeStringToBytes(key)) % 1000
 	blk, sft := slot>>3, slot&7
@@ -45,6 +55,8 @@ func (s *Segment) locate(key string) *Group {
 	return nil
 }
 
+// GetExpConfig evaluates experiments for a given key and context and returns
+// a per-layer configuration map and a list of debug tags.
 func GetExpConfig(exps []Experiment, key string, ctx map[string]string) (config map[string]string, tags []string) {
 	config = make(map[string]string)
 	mark := func(l *Layer, g *Group) {

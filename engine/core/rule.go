@@ -8,7 +8,10 @@ import (
 	"github.com/peterrk/simple-abtest/utils"
 )
 
+// OpType represents the logical or comparison operation used in an expression node.
 type OpType int
+
+// DataType describes the type of value an expression node operates on.
 type DataType int
 
 const (
@@ -33,6 +36,9 @@ const (
 	DtFloat
 )
 
+// ExprNode describes a single node in a boolean expression tree used
+// to filter experiments based on request context.
+// The tree is constructed from a flat slice using Left and Right indices.
 type ExprNode struct {
 	Op      OpType   `json:"op"`
 	DType   DataType `json:"dtype,omitempty"`
@@ -54,6 +60,9 @@ var (
 	errArgmentMiss  = errors.New("argment miss")
 )
 
+// ParseExpr parses a JSON encoded expression configuration into a slice
+// of ExprNode and wires their child pointers. It validates the structure
+// and returns errBrokenConfig on invalid input.
 func ParseExpr(config []byte) ([]ExprNode, error) {
 	if len(config) == 0 {
 		return nil, nil
@@ -135,6 +144,9 @@ func cmpGreatOrEqual[T ordered](a, b T) bool {
 	return a >= b
 }
 
+// EvalExpr evaluates a parsed expression using the provided argument map.
+// It returns true when the expression passes; missing or malformed arguments
+// cause evaluation to fail and return false.
 func EvalExpr(expr []ExprNode, args map[string]string) bool {
 	if len(expr) == 0 {
 		return true

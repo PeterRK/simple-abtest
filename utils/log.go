@@ -18,14 +18,18 @@ var logger struct {
 	sugar *zap.SugaredLogger
 }
 
+// GetRawLogger returns the underlying zap.Logger instance.
 func GetRawLogger() *zap.Logger {
 	return logger.entry
 }
 
+// GetLogger returns the global sugared logger.
 func GetLogger() *zap.SugaredLogger {
 	return logger.sugar
 }
 
+// HttpChangeLogLevel changes the global log level based on the request body.
+// It accepts DEBUG/INFO/WARN/ERROR (case-insensitive).
 func HttpChangeLogLevel(w http.ResponseWriter, r *http.Request) {
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -47,6 +51,8 @@ func HttpChangeLogLevel(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// InitLog initializes the global logger writing JSON logs to the given path.
+// Repeated calls after initialization are ignored.
 func InitLog(path string, maxBackups, maxDays int) {
 	if logger.entry != nil {
 		return
@@ -66,12 +72,14 @@ func InitLog(path string, maxBackups, maxDays int) {
 	logger.sugar = logger.entry.Sugar()
 }
 
+// SyncLog flushes buffered log entries to the underlying writer.
 func SyncLog() {
 	if logger.entry != nil {
 		logger.entry.Sync()
 	}
 }
 
+// LogLevel is an alias of zapcore.Level for log level configuration.
 type LogLevel = zapcore.Level
 
 const (
@@ -82,10 +90,12 @@ const (
 	FatalLevel = zap.FatalLevel
 )
 
+// LogLevelEnabled reports whether the given level is enabled on the global logger.
 func LogLevelEnabled(lv LogLevel) bool {
 	return logger.level.Enabled(lv)
 }
 
+// SetLogLevel updates the global logger level at runtime.
 func SetLogLevel(lv LogLevel) {
 	logger.level.SetLevel(lv)
 }
@@ -96,10 +106,12 @@ func init() {
 	}
 }
 
+// LogFilter provides a lightweight level filter in front of the global logger.
 type LogFilter struct {
 	level zapcore.Level
 }
 
+// SetLevel sets the minimum enabled level on LogFilter.
 func (l *LogFilter) SetLevel(lv LogLevel) {
 	l.level = zapcore.Level(lv)
 }

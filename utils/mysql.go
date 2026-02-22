@@ -8,6 +8,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 )
 
+// IsMysqlDuplicateError reports whether err represents a MySQL duplicate key error.
 func IsMysqlDuplicateError(err error) bool {
 	if obj, ok := err.(*mysql.MySQLError); ok {
 		return obj.Number == 1062
@@ -15,6 +16,7 @@ func IsMysqlDuplicateError(err error) bool {
 	return false
 }
 
+// SqlCreate executes an INSERT statement and returns the last inserted ID.
 func SqlCreate(stmt *sql.Stmt, args ...any) (int64, error) {
 	result, err := stmt.Exec(args...)
 	if err != nil {
@@ -23,6 +25,7 @@ func SqlCreate(stmt *sql.Stmt, args ...any) (int64, error) {
 	return result.LastInsertId()
 }
 
+// SqlModify executes an UPDATE/DELETE statement and returns rows affected.
 func SqlModify(stmt *sql.Stmt, args ...any) (int64, error) {
 	result, err := stmt.Exec(args...)
 	if err != nil {
@@ -31,6 +34,7 @@ func SqlModify(stmt *sql.Stmt, args ...any) (int64, error) {
 	return result.RowsAffected()
 }
 
+// SqlModifyContext is SqlModify with a context for cancellation.
 func SqlModifyContext(ctx context.Context, stmt *sql.Stmt, args ...any) (int64, error) {
 	result, err := stmt.ExecContext(ctx, args...)
 	if err != nil {
@@ -39,6 +43,7 @@ func SqlModifyContext(ctx context.Context, stmt *sql.Stmt, args ...any) (int64, 
 	return result.RowsAffected()
 }
 
+// OverwriteMysqlParams overwrites or adds query parameters on a MySQL DSN.
 func OverwriteMysqlParams(config string, patch map[string]string) string {
 	if len(patch) == 0 {
 		return config

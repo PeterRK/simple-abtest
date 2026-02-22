@@ -55,22 +55,27 @@ func httpReplyJson(w http.ResponseWriter, code int, obj any, log bool) error {
 	return json.NewEncoder(w).Encode(obj)
 }
 
+// HttpGetJsonArgs decodes a JSON request body into obj without logging.
 func HttpGetJsonArgs(r *http.Request, obj any) error {
 	return httpGetJsonArgs(r, obj, false)
 }
 
+// HttpGetJsonArgsWithLog decodes a JSON request body into obj and logs the raw body.
 func HttpGetJsonArgsWithLog(r *http.Request, obj any) error {
 	return httpGetJsonArgs(r, obj, true)
 }
 
+// HttpReplyJson writes obj as JSON response with the given HTTP status code.
 func HttpReplyJson(w http.ResponseWriter, code int, obj any) error {
 	return httpReplyJson(w, code, obj, false)
 }
 
+// HttpReplyJsonWithLog writes obj as JSON response and logs the encoded body.
 func HttpReplyJsonWithLog(w http.ResponseWriter, code int, obj any) error {
 	return httpReplyJson(w, code, obj, true)
 }
 
+// HttpGetJsonArgsWithLogger decodes a JSON body into obj and logs through LogCtx.
 func HttpGetJsonArgsWithLogger(logger LogCtx, r *http.Request, obj any) error {
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -80,6 +85,7 @@ func HttpGetJsonArgsWithLogger(logger LogCtx, r *http.Request, obj any) error {
 	return json.Unmarshal(raw, obj)
 }
 
+// HttpReplyJsonWithLogger writes obj as JSON and logs through LogCtx.
 func HttpReplyJsonWithLogger(logger LogCtx, w http.ResponseWriter, code int, obj any) error {
 	if obj == nil {
 		w.WriteHeader(code)
@@ -101,6 +107,8 @@ var (
 	pbJsonUnmarshaller = protojson.UnmarshalOptions{DiscardUnknown: true}
 )
 
+// HttpGetPbArgs reads a protobuf request into m.
+// When Content-Type is application/json it expects JSON, otherwise protobuf wire format.
 func HttpGetPbArgs(r *http.Request, m proto.Message) (bin bool, err error) {
 	bin = r.Header.Get("Content-Type") != "application/json"
 	raw, err := io.ReadAll(r.Body)
@@ -115,6 +123,7 @@ func HttpGetPbArgs(r *http.Request, m proto.Message) (bin bool, err error) {
 	return bin, err
 }
 
+// HttpReplyPb writes a protobuf message as either JSON or protobuf wire format.
 func HttpReplyPb(w http.ResponseWriter, code int, m proto.Message, bin bool) (err error) {
 	if m == nil {
 		w.WriteHeader(code)
@@ -136,6 +145,7 @@ func HttpReplyPb(w http.ResponseWriter, code int, m proto.Message, bin bool) (er
 	return err
 }
 
+// RunHttpServer starts an HTTP server on address and shuts it down on SIGINT/SIGTERM.
 func RunHttpServer(router http.Handler, address string) error {
 	srv := &http.Server{
 		Addr:    address,
@@ -159,6 +169,8 @@ func RunHttpServer(router http.Handler, address string) error {
 	return nil
 }
 
+// NewRestfulRequest builds an HTTP request with optional JSON body and headers/params.
+// If obj is *[]byte the raw bytes are sent as the request body.
 func NewRestfulRequest(ctx context.Context, method, url string,
 	headers, params map[string]string, obj any) (*http.Request, error) {
 	var body io.Reader
@@ -208,24 +220,27 @@ func (e *responseError) Error() string {
 	return e.msg
 }
 
-func newResponseError(code int, body io.Reader) error {
-	data, err := io.ReadAll(body)
-	if err != nil {
-		return err
-	}
-	respErr := &responseError{}
+func newResponseError(code int, data []byte) error {
+	err := &responseError{}
 	if utf8.Valid(data) {
-		respErr.msg = fmt.Sprintf("[%d] %s", code, UnsafeBytesToString(data))
+		err.msg = fmt.Sprintf("[%d] %s", code, UnsafeBytesToString(data))
 	} else {
-		respErr.msg = fmt.Sprintf("[%d]:%s", code, hex.Dump(data))
+		err.msg = fmt.Sprintf("[%d]:%s", code, hex.Dump(data))
 	}
-	return respErr
+	return err
 }
 
+// HandleRestfulResponse decodes an HTTP response into obj.
+// When obj is nil it discards the body; when obj is *[]byte it returns the raw body.
 func HandleRestfulResponse(resp *http.Response, obj any) (code int, err error) {
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated &&
 		!(resp.StatusCode == http.StatusNoContent && obj == nil) {
-		return resp.StatusCode, newResponseError(resp.StatusCode, resp.Body)
+		data, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return resp.StatusCode, err
+		}
+		return resp.StatusCode, newResponseError(resp.StatusCode, data)
 	}
 	defer resp.Body.Close()
 	if obj == nil {
@@ -249,6 +264,8 @@ var defaultDialer = &net.Dialer{
 	KeepAlive: 30 * time.Second,
 }
 
+// CustomizeDefaultHttpClient replaces http.DefaultClient with a client using
+// the given connection pooling limits.
 func CustomizeDefaultHttpClient(maxIdleConns, maxIdleConnsPerHost, maxConnsPerHost int) {
 	http.DefaultClient = &http.Client{
 		Transport: &http.Transport{
@@ -283,21 +300,25 @@ func RestfulGet(ctx context.Context, url string,
 	return RestfulDo(ctx, http.MethodGet, url, headers, params, nil, out)
 }
 
+// RestfulDelete sends an HTTP DELETE request and discards the response body.
 func RestfulDelete(ctx context.Context, url string,
 	headers, params map[string]string) (code int, err error) {
 	return RestfulDo(ctx, http.MethodDelete, url, headers, params, nil, nil)
 }
 
+// RestfulPost sends an HTTP POST with an optional JSON body and decodes response into out.
 func RestfulPost(ctx context.Context, url string,
 	headers, params map[string]string, obj, out any) (code int, err error) {
 	return RestfulDo(ctx, http.MethodPost, url, headers, params, obj, out)
 }
 
+// RestfulPatch sends an HTTP PATCH with an optional JSON body.
 func RestfulPatch(ctx context.Context, url string,
 	headers, params map[string]string, obj any) (code int, err error) {
 	return RestfulDo(ctx, http.MethodPatch, url, headers, params, obj, nil)
 }
 
+// RestfulPut sends an HTTP PUT with an optional JSON body.
 func RestfulPut(ctx context.Context, url string,
 	headers, params map[string]string, obj any) (code int, err error) {
 	return RestfulDo(ctx, http.MethodPut, url, headers, params, obj, nil)

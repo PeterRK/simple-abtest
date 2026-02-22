@@ -72,7 +72,7 @@ func prepareExpSql(db *sql.DB) (err error) {
 		return err
 	}
 	expSql.toggle, err = db.Prepare(
-		"UPDATE `experiment` SET `status`=? WHERE `exp_id`=?")
+		"UPDATE `experiment` SET `status`=?,`version`=? WHERE `exp_id`=? AND `version`=?")
 	if err != nil {
 		return err
 	}
@@ -378,16 +378,21 @@ func expSwitch(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	if req.Status != 0 && req.Status != 1 {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 
-	n, err := utils.SqlModify(expSql.shuffle, rand.Uint32(), id)
+	n, err := utils.SqlModify(expSql.toggle, req.Status, req.Version+1, id, req.Version)
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[exp.shuffle]: %v", err)
+		utils.GetLogger().Errorf("fail to run sql[exp.toggle]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	if n == 0 {
-		w.WriteHeader(http.StatusNotFound)
+		utils.GetLogger().Warnf("[expSwitch] conflict: %d", id)
+		w.WriteHeader(http.StatusConflict)
 		return
 	}
-	utils.GetLogger().Infof("toggle experiment %d: ", id, req.Status)
+	utils.GetLogger().Infof("toggle experiment %d: %d", id, req.Status)
 }
