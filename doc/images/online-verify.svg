@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540">
+  <style>
+    .title { font: 20px sans-serif; fill: #222; }
+    .label { font: 14px sans-serif; fill: #444; }
+    .small { font: 12px sans-serif; fill: #555; }
+    .box  { fill: #f9fbff; stroke: #b3c0ff; stroke-width: 1.5; }
+    .header { fill: #eef2ff; }
+    .pill { fill: #e5e7eb; }
+  </style>
+
+  <!-- Page title -->
+  <text x="40" y="40" class="title">在线验证页示意</text>
+
+  <!-- Panel -->
+  <rect x="40" y="70" width="880" height="400" class="box"/>
+  <rect x="40" y="70" width="880" height="32" class="header"/>
+  <text x="52" y="92" class="label">在线验证</text>
+
+  <!-- Form -->
+  <text x="60" y="120" class="small">应用</text>
+  <rect x="110" y="106" width="220" height="26" class="pill" rx="6" ry="6"/>
+  <text x="120" y="123" class="small">demo-app-1 ▼</text>
+
+  <text x="60" y="160" class="small">key</text>
+  <rect x="110" y="146" width="260" height="26" class="box" rx="4" ry="4"/>
+  <text x="120" y="163" class="small">user_123456</text>
+
+  <text x="60" y="200" class="small">context（JSON）</text>
+  <rect x="60" y="210" width="420" height="140" class="box" rx="4" ry="4"/>
+  <text x="70" y="230" class="small">{</text>
+  <text x="90" y="248" class="small">"region": "CN",</text>
+  <text x="90" y="266" class="small">"channel": "app"</text>
+  <text x="70" y="284" class="small">}</text>
+
+  <rect x="60" y="366" width="120" height="28" class="pill" rx="4" ry="4"/>
+  <text x="78" y="386" class="small">发起验证</text>
+
+  <!-- Result -->
+  <text x="510" y="120" class="small">命中结果</text>
+  <rect x="510" y="130" width="390" height="300" class="box" rx="4" ry="4"/>
+</svg>

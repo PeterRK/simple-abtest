@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540">
+  <style>
+    .title { font: 18px sans-serif; fill: #222; }
+    .small { font: 11px sans-serif; fill: #555; }
+    .box  { fill: #f9fbff; stroke: #b3c0ff; stroke-width: 1.2; }
+    .btn { fill: #4f46e5; stroke: #4338ca; stroke-width: 1; }
+    .btn-text { font: 11px sans-serif; fill: #fff; }
+    .pill { fill: #e5e7eb; }
+    .switch { fill: #d1fae5; stroke: #10b981; stroke-width: 1; }
+    .knob { fill: #10b981; }
+  </style>
+
+  <text x="48" y="34" class="title">实验列表页布局示意</text>
+
+  <rect x="48" y="48" width="864" height="52" class="box"/>
+
+  <rect x="60" y="64" width="260" height="22" class="pill" rx="5" ry="5"/>
+  <text x="70" y="79" class="small">应用名(应用ID) ▼</text>
+
+  <rect x="332" y="64" width="72" height="22" class="btn" rx="4" ry="4"/>
+  <text x="368" y="79" class="btn-text" text-anchor="middle">新增应用</text>
+
+  <rect x="412" y="64" width="52" height="22" class="pill" rx="4" ry="4"/>
+  <text x="438" y="79" class="small" text-anchor="middle">详情</text>
+
+  <rect x="812" y="64" width="88" height="22" class="btn" rx="4" ry="4"/>
+  <text x="856" y="79" class="btn-text" text-anchor="middle">新增实验</text>
+
+  <rect x="48" y="128" width="864" height="260" class="box"/>
+  <rect x="48" y="128" width="864" height="26" class="pill"/>
+
+  <text x="60" y="146" class="small">名称</text>
+  <text x="780" y="146" class="small">生效状态</text>
+
+  <rect x="56" y="162" width="840" height="32" class="pill" rx="4" ry="4"/>
+  <text x="68" y="182" class="small">会员折扣实验</text>
+
+  <rect x="780" y="168" width="60" height="20" class="switch" rx="10" ry="10"/>
+  <circle cx="828" cy="178" r="8" class="knob"/>
+  <text x="848" y="182" class="small">启用</text>
+</svg>

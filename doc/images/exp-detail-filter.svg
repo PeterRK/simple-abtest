@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540">
+  <style>
+    .title { font: 20px sans-serif; fill: #222; }
+    .label { font: 14px sans-serif; fill: #444; }
+    .small { font: 12px sans-serif; fill: #555; }
+    .box  { fill: #f9fbff; stroke: #b3c0ff; stroke-width: 1.5; }
+    .header { fill: #eef2ff; }
+    .pill { fill: #e5e7eb; }
+    .op { fill: #4f46e5; }
+    .op-text { font: 12px sans-serif; fill: #fff; }
+    .node { fill: #f3f4f6; stroke: #d1d5db; stroke-width: 1; }
+  </style>
+
+  <text x="40" y="40" class="title">实验详情页 - 过滤条件规则树示意</text>
+
+  <rect x="40" y="70" width="880" height="420" class="box"/>
+
+  <rect x="60" y="112" width="14" height="14" class="box" rx="3" ry="3"/>
+  <text x="80" y="124" class="small">启用过滤条件</text>
+
+  <rect x="60" y="150" width="860" height="40" class="node" rx="6" ry="6"/>
+  <rect x="70" y="158" width="80" height="24" class="op" rx="4" ry="4"/>
+  <text x="84" y="174" class="op-text">AND ▼</text>
+  <rect x="190" y="158" width="70" height="24" class="pill" rx="4" ry="4"/>
+  <text x="202" y="174" class="small">+ 子OP</text>
+
+  <rect x="90" y="200" width="830" height="40" class="pill" rx="6" ry="6"/>
+  <!-- 行 1：uid IN [...] -->
+  <rect x="100" y="208" width="80" height="24" class="op" rx="4" ry="4"/>
+  <text x="124" y="224" class="op-text">IN ▼</text>
+  <text x="190" y="225" class="small">Key</text>
+  <rect x="220" y="208" width="120" height="24" class="box" rx="4" ry="4"/>
+  <text x="230" y="224" class="small">uid</text>
+  <text x="350" y="225" class="small">参数</text>
+  <!-- 参数类型下拉框 -->
+  <rect x="388" y="208" width="90" height="24" class="pill" rx="4" ry="4"/>
+  <text x="400" y="224" class="small">字符串 ▼</text>
+  <!-- 参数内容输入框 -->
+  <rect x="496" y="208" width="200" height="24" class="box" rx="4" ry="4"/>
+  <text x="506" y="224" class="small">vip, svip</text>
+  <!-- 子OP删除按钮（第 2 行） -->
+  <rect x="850" y="208" width="60" height="24" class="pill" rx="4" ry="4"/>
+  <text x="862" y="224" class="small">删除</text>
+
+  <rect x="90" y="250" width="830" height="40" class="pill" rx="6" ry="6"/>
+  <!-- 行 2：region == CN -->
+  <rect x="100" y="258" width="80" height="24" class="op" rx="4" ry="4"/>
+  <text x="124" y="274" class="op-text">== ▼</text>
+  <text x="190" y="275" class="small">Key</text>
+  <rect x="220" y="258" width="120" height="24" class="box" rx="4" ry="4"/>
+  <text x="230" y="274" class="small">region</text>
+  <text x="350" y="275" class="small">参数</text>
+  <!-- 参数类型下拉框 -->
+  <rect x="388" y="258" width="90" height="24" class="pill" rx="4" ry="4"/>
+  <text x="400" y="274" class="small">字符串 ▼</text>
+  <!-- 参数内容输入框 -->
+  <rect x="496" y="258" width="200" height="24" class="box" rx="4" ry="4"/>
+  <text x="506" y="274" class="small">CN</text>
+  <!-- 子OP删除按钮（第 3 行） -->
+  <rect x="850" y="258" width="60" height="24" class="pill" rx="4" ry="4"/>
+  <text x="862" y="274" class="small">删除</text>
+
+  <rect x="90" y="310" width="830" height="40" class="node" rx="6" ry="6"/>
+  <rect x="100" y="318" width="80" height="24" class="op" rx="4" ry="4"/>
+  <text x="124" y="334" class="op-text">NOT ▼</text>
+  <!-- 子OP删除按钮（第 4 行） -->
+  <rect x="850" y="318" width="60" height="24" class="pill" rx="4" ry="4"/>
+  <text x="862" y="334" class="small">删除</text>
+
+  <rect x="120" y="360" width="800" height="40" class="pill" rx="6" ry="6"/>
+  <!-- 行 3：NOT env IN [...] -->
+  <rect x="130" y="368" width="80" height="24" class="op" rx="4" ry="4"/>
+  <text x="154" y="384" class="op-text">IN ▼</text>
+  <text x="220" y="385" class="small">Key</text>
+  <rect x="250" y="368" width="120" height="24" class="box" rx="4" ry="4"/>
+  <text x="260" y="384" class="small">env</text>
+  <text x="380" y="385" class="small">参数</text>
+  <!-- 参数类型下拉框 -->
+  <rect x="418" y="368" width="90" height="24" class="pill" rx="4" ry="4"/>
+  <text x="430" y="384" class="small">字符串 ▼</text>
+  <!-- 参数内容输入框 -->
+  <rect x="526" y="368" width="180" height="24" class="box" rx="4" ry="4"/>
+  <text x="536" y="384" class="small">pre, dev</text>
+</svg>
