@@ -1,10 +1,10 @@
 package core
 
 import (
+	"encoding/json"
 	"errors"
 	"strconv"
 
-	json "github.com/goccy/go-json"
 	"github.com/peterrk/simple-abtest/utils"
 )
 

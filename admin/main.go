@@ -27,7 +27,7 @@ func Main() int {
 	)
 	flag.UintVar(&port, "port", 8001, "service port")
 	flag.StringVar(&cfgPath, "config", "config.yaml", "config file")
-	flag.StringVar(&logPath, "log", "log.txt", "log file path")
+	flag.StringVar(&logPath, "log", "", "log file path")
 	flag.Parse()
 
 	config := struct {
@@ -91,10 +91,11 @@ func Main() int {
 		router.HandlerFunc(http.MethodGet, "/debug/pprof/trace", pprof.Trace)
 	}
 
+	utils.GetLogger().Info("Server Up")
 	if err := utils.RunHttpServer(router, fmt.Sprintf(":%d", port)); err != nil {
 		return -1
 	}
-	utils.GetLogger().Info("Finishing...")
+	utils.GetLogger().Info("Server Down")
 	return 0
 }
 
@@ -111,9 +112,6 @@ func prepareSqls() error {
 		return err
 	}
 	if err := prepareSegSql(db); err != nil {
-		return err
-	}
-	if err := prepareGrpSql(db); err != nil {
 		return err
 	}
 	if err := prepareGrpSql(db); err != nil {

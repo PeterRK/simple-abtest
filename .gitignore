@@ -35,4 +35,6 @@ go.sum
 
 
 engine/engine
+engine/config.yaml
 admin/admin
+admin/config.yaml

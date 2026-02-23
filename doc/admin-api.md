@@ -2,16 +2,13 @@
 
 This document describes the HTTP endpoints exposed by the admin service.
 
-### Versioning and optimistic locking
+### Conventions
 
-- Each mutable resource (`application`, `experiment`, `exp_layer`, `exp_segment`, `exp_group`)
-  has a `version` field used for optimistic locking.
-- Update and delete operations require the caller to send the current `version` value; the
-  server only applies the change when the stored version matches the provided one.
-- On successful writes, the affected resource (or its parent, when structure changes) has
-  its version incremented by 1.
-- Some helper operations, such as seed shuffle, intentionally do not change any `version`
-  field and are safe to call concurrently (last value wins).
+- **Content-Type**: `application/json` by default.
+- **Optimistic Locking**: Mutating operations require a `version` field. The server checks this against the stored version.
+  - On mismatch, returns `409 Conflict`.
+  - On success, the resource (or parent) version is incremented.
+- **Common Errors**: `400 Bad Request` (invalid input), `404 Not Found` (resource missing), `500 Internal Server Error`.
 
 ---
 
@@ -19,90 +16,69 @@ This document describes the HTTP endpoints exposed by the admin service.
 
 Create a new application.
 
-- **Method**: `POST`
-- **Content-Type**: `application/json`
-
-**Request Body**
+**Request**
 
 ```json
 {
   "name": "my-app",
-  "description": "optional description"
+  "description": "optional"
 }
 ```
 
-- `name` (string, required): Application name.
-- `description` (string, optional): Human readable description.
-
-**Responses**
-
-- `200 OK` with created application:
+**Response (200 OK)**
 
 ```json
 {
   "id": 1001,
   "name": "my-app",
   "version": 0,
-  "description": "optional description"
+  "description": "optional"
 }
 ```
-
-- `400 Bad Request` if body is invalid or `name` is empty.
-- `500 Internal Server Error` on database errors.
 
 ### GET `/api/app`
 
 List all applications.
 
-- **Method**: `GET`
-
-**Response**
-
-- `200 OK`:
+**Response (200 OK)**
 
 ```json
 [
-  { "id": 1001, "name": "my-app" },
-  { "id": 1002, "name": "another-app" }
+  {
+    "id": 1001,
+    "name": "my-app"
+  }
 ]
 ```
 
 ### GET `/api/app/:id`
 
-Get details of a single application and its experiments.
+Get application details and its experiments.
 
-- **Method**: `GET`
-- **Path Parameter**:
-  - `id` (uint32): Application ID.
-
-**Response**
-
-- `200 OK`:
+**Response (200 OK)**
 
 ```json
 {
   "id": 1001,
   "name": "my-app",
   "version": 3,
-  "description": "optional description",
+  "description": "optional",
   "experiment": [
-    { "id": 2001, "status": 1, "name": "exp-A" }
+    {
+      "id": 2001,
+      "status": 1,
+      "name": "exp-A",
+      "description": "optional"
+    }
   ]
 }
 ```
 
-- `400 Bad Request` if `id` is not a valid integer.
-- `404 Not Found` if the application does not exist.
-- `500 Internal Server Error` on database errors.
-
 ### PUT `/api/app/:id`
 
-Update an application (optimistic locking).
+Update an application.
 
-- **Method**: `PUT`
-- **Content-Type**: `application/json`
-
-**Request Body**
+**Request**
 
 ```json
 {
@@ -112,23 +88,13 @@ Update an application (optimistic locking).
 }
 ```
 
-- `version` (uint32, required): Current version for optimistic locking.
-
-**Responses**
-
-- `200 OK` with updated application (version incremented by 1).
-- `400 Bad Request` if body is invalid or `name` is empty.
-- `409 Conflict` if version does not match (concurrent modification).
-- `500 Internal Server Error` on database errors.
+**Response (200 OK)**: Updated application object.
 
 ### DELETE `/api/app/:id`
 
-Delete an application (only when it has no experiments).
+Delete an application (must have no experiments).
 
-- **Method**: `DELETE`
-- **Content-Type**: `application/json`
-
-**Request Body**
+**Request**
 
 ```json
 {
@@ -136,51 +102,26 @@ Delete an application (only when it has no experiments).
 }
 ```
 
-**Responses**
-
-- `204 No Content` on success (body empty).
-- `400 Bad Request` if body is invalid.
-- `403 Forbidden` if there are experiments under the application.
-- `409 Conflict` if version does not match.
-- `500 Internal Server Error` on database errors.
+**Response (200 OK)**: Empty body; `403` if not empty.
 
 ---
 
 ### POST `/api/exp`
 
-Create a new experiment under an application.
+Create an experiment.
 
-- **Method**: `POST`
-- **Content-Type**: `application/json`
-
-**Request Body**
+**Request**
 
 ```json
 {
   "app_id": 1001,
   "app_ver": 3,
-  "id": 0,
-  "status": 0,
   "name": "exp-A",
-  "version": 0,
-  "description": "optional",
-  "filter": [
-    { "op": 6, "dtype": 1, "key": "country", "s": "CN" }
-  ]
+  "description": "optional"
 }
 ```
 
-- `app_id` (uint32, required): Owning application ID.
-- `app_ver` (uint32, required): Application version for optimistic locking.
-- `name` (string, required): Experiment name.
-- `description` (string, optional).
-- `filter` (array, optional): Expression nodes defining filter criteria.
-
-The filter is validated by `engine/core.ParseExpr`.
-
-**Responses**
-
-- `200 OK` with created experiment:
+**Response (200 OK)**
 
 ```json
 {
@@ -188,83 +129,59 @@ The filter is validated by `engine/core.ParseExpr`.
   "status": 0,
   "name": "exp-A",
   "version": 0,
-  "description": "optional",
-  "filter": [ ... ]
+  "description": "optional"
 }
 ```
 
-- `400 Bad Request` if name is empty or filter JSON is illegal.
-- `409 Conflict` if application version check fails.
-- `500 Internal Server Error` on database or transaction errors.
-
-On success, the owning application `version` is incremented by 1.
-
 ### GET `/api/exp/:id`
 
-Get full experiment details including layers.
+Get experiment details including layers.
 
-- **Method**: `GET`
-- **Path Parameter**:
-  - `id` (uint32): Experiment ID.
-
-**Response**
-
-- `200 OK`:
+**Response (200 OK)**
 
 ```json
 {
   "id": 2001,
   "status": 1,
   "name": "exp-A",
-  "version": 3,
   "description": "optional",
-  "filter": [ ... ],
+  "version": 3,
+  "filter": [
+    ...
+  ],
   "layer": [
-    { "id": 3001, "name": "layer-1" }
+    {
+      "id": 3001,
+      "name": "layer-1"
+    }
   ]
 }
 ```
 
-- `400 Bad Request` if `id` is invalid.
-- `404 Not Found` if experiment does not exist.
-- `500 Internal Server Error` on database errors or broken filter JSON.
-
 ### PUT `/api/exp/:id`
 
-Update experiment metadata and filter (optimistic locking).
+Update experiment metadata and filter.
 
-- **Method**: `PUT`
-- **Content-Type**: `application/json`
-
-**Request Body**
+**Request**
 
 ```json
 {
   "name": "new-name",
-  "description": "new description",
-  "status": 0,
+  "description": "new desc",
   "version": 3,
-  "filter": [ ... ]
+  "filter": [
+    ...
+  ]
 }
 ```
 
-**Responses**
-
-- `200 OK` with updated experiment. The `version` field in the response is the
-  new value (typically the request `version + 1`).
-- `400 Bad Request` if name is empty or filter is illegal.
-- `404 Not Found` if experiment is deleted during update.
-- `409 Conflict` if version does not match.
-- `500 Internal Server Error` on database errors.
+**Response (200 OK)**: Updated experiment object.
 
 ### DELETE `/api/exp/:id`
 
 Delete an experiment.
 
-- **Method**: `DELETE`
-- **Content-Type**: `application/json`
-
-**Request Body**
+**Request**
 
 ```json
 {
@@ -274,38 +191,19 @@ Delete an experiment.
 }
 ```
 
-**Responses**
-
-- `204 No Content` on success.
-- `400 Bad Request` on invalid body.
-- `409 Conflict` if version does not match.
-- `500 Internal Server Error` on database or transaction errors.
-
-On success, the owning application `version` is incremented by 1.
+**Response (200 OK)**: Empty body.
 
 ### POST `/api/exp/:id/shuffle`
 
-Regenerate the experiment seed.
+Regenerate experiment seed. Safe to call concurrently (no version check).
 
-- **Method**: `POST`
+**Response (200 OK)**: Empty body.
 
-**Responses**
+### PUT `/api/exp/:id/status`
 
-- `204 No Content` on success.
-- `400 Bad Request` if `id` is invalid.
-- `404 Not Found` if experiment does not exist.
-- `500 Internal Server Error` on database errors.
+Toggle experiment status (`0`: stopped, `1`: active).
 
-This operation does not change any `version` field.
-
-### PUT `/api/exp/:id/switch`
-
-Toggle experiment status (optimistic locking).
-
-- **Method**: `PUT`
-- **Content-Type**: `application/json`
-
-**Request Body**
+**Request**
 
 ```json
 {
@@ -314,106 +212,72 @@ Toggle experiment status (optimistic locking).
 }
 ```
 
-- `status` (uint8, required): New status value (0 = stopped, 1 = active).
-- `version` (uint32, required): Expected current experiment version. The write
-  only succeeds when this matches the stored value.
-
-**Responses**
-
-- `204 No Content` on success.
-- `400 Bad Request` on invalid input or unsupported status.
-- `404 Not Found` if experiment does not exist.
-- `409 Conflict` if version does not match (concurrent modification).
-- `500 Internal Server Error` on database errors.
-
-On success, the experiment `version` is incremented by 1.
+**Response (200 OK)**: Empty body.
 
 ---
 
 ### POST `/api/lyr`
 
-Create a new layer under an experiment (with a default segment).
+Create a layer (with a default segment).
 
-- **Method**: `POST`
-- **Content-Type**: `application/json`
-
-**Request Body**
+**Request**
 
 ```json
 {
   "exp_id": 2001,
   "exp_ver": 3,
-  "id": 0,
-  "name": "layer-1",
-  "version": 0,
-  "description": "optional"
+  "name": "layer-1"
 }
 ```
 
-**Responses**
-
-- `200 OK` with created layer (version 0).
-- `400 Bad Request` if name is empty or body invalid.
-- `409 Conflict` if experiment version check fails.
-- `500 Internal Server Error` on database errors.
-
-On success, the owning experiment `version` is incremented by 1.
+**Response (200 OK)**: Created layer object.
 
 ### GET `/api/lyr/:id`
 
-Get layer details including its segments.
+Get layer details including segments.
 
-- **Method**: `GET`
-
-**Response**
-
-- `200 OK`:
+**Response (200 OK)**
 
 ```json
 {
   "id": 3001,
   "name": "layer-1",
   "version": 2,
-  "description": "optional",
   "segment": [
-    { "id": 4001, "begin": 0, "end": 50 },
-    { "id": 4002, "begin": 50, "end": 100 }
+    {
+      "id": 4001,
+      "begin": 0,
+      "end": 50
+    },
+    {
+      "id": 4002,
+      "begin": 50,
+      "end": 100
+    }
   ]
 }
 ```
 
 ### PUT `/api/lyr/:id`
 
-Update layer metadata (optimistic locking).
+Update layer metadata.
 
-- **Method**: `PUT`
-- **Content-Type**: `application/json`
-
-**Request Body**
+**Request**
 
 ```json
 {
-  "name": "new-layer-name",
-  "description": "optional",
+  "name": "new-name",
   "version": 2
 }
 ```
 
-**Responses**
-
-- `200 OK` with updated layer (version incremented by 1).
-- `400 Bad Request` if name is empty.
-- `409 Conflict` if version does not match.
-- `500 Internal Server Error` on database errors.
+**Response (200 OK)**: Updated layer object.
 
 ### DELETE `/api/lyr/:id`
 
 Delete a layer.
 
-- **Method**: `DELETE`
-- **Content-Type**: `application/json`
-
-**Request Body**
+**Request**
 
 ```json
 {
@@ -423,62 +287,41 @@ Delete a layer.
 }
 ```
 
-**Responses**
-
-- `204 No Content` on success.
-- `400 Bad Request` on invalid body.
-- `409 Conflict` if version does not match or dependent data changed.
-- `500 Internal Server Error` on database or transaction errors.
-
-On success, the owning experiment `version` is incremented by 1.
+**Response (200 OK)**: Empty body.
 
 ### POST `/api/lyr/:id/rebalance`
 
-Rebalance layer coverage across segments.
+Rebalance layer segments. Segments must be contiguous and cover [0, 100).
 
-- **Method**: `POST`
-- **Content-Type**: `application/json`
-
-**Request Body**
+**Request**
 
 ```json
 {
   "version": 2,
   "segment": [
-    { "id": 4001, "begin": 0, "end": 40 },
-    { "id": 4002, "begin": 40, "end": 100 }
+    {
+      "id": 4001,
+      "begin": 0,
+      "end": 40
+    },
+    {
+      "id": 4002,
+      "begin": 40,
+      "end": 100
+    }
   ]
 }
 ```
 
-Validation rules:
-
-- At least 2 segments.
-- First segment must start at 0.
-- Last segment must end at 100.
-- All segments must be contiguous: `segment[i].begin == segment[i-1].end`.
-- No duplicated segment IDs.
-
-**Responses**
-
-- `204 No Content` on success.
-- `400 Bad Request` if validation fails.
-- `409 Conflict` if current DB segment set does not match the provided list
-  or versions conflict.
-- `500 Internal Server Error` on database or transaction errors.
-
-On success, the layer `version` is incremented by 1.
+**Response (200 OK)**: Empty body.
 
 ---
 
 ### POST `/api/seg`
 
-Create a new segment under a layer (with a default group).
+Create a new segment (initially `[100, 100)`, with a default group).
 
-- **Method**: `POST`
-- **Content-Type**: `application/json`
-
-**Request Body**
+**Request**
 
 ```json
 {
@@ -487,12 +330,7 @@ Create a new segment under a layer (with a default group).
 }
 ```
 
-The new segment initially covers `[100, 100)` and does not receive traffic
-until rebalanced.
-
-**Responses**
-
-- `200 OK`:
+**Response (200 OK)**
 
 ```json
 {
@@ -503,21 +341,11 @@ until rebalanced.
 }
 ```
 
--- `400 Bad Request` on invalid body.
--- `409 Conflict` if layer version check fails.
--- `500 Internal Server Error` on database or transaction errors.
-
-On success, the owning layer `version` is incremented by 1.
-
 ### GET `/api/seg/:id`
 
-Get segment details including its groups.
+Get segment details including groups.
 
-- **Method**: `GET`
-
-**Response**
-
-- `200 OK`:
+**Response (200 OK)**
 
 ```json
 {
@@ -526,20 +354,26 @@ Get segment details including its groups.
   "end": 50,
   "version": 1,
   "group": [
-    { "id": 5001, "share": 500, "name": "DEFAULT", "is_default": true },
-    { "id": 5002, "share": 500, "name": "B" }
+    {
+      "id": 5001,
+      "share": 500,
+      "name": "DEFAULT",
+      "is_default": true
+    },
+    {
+      "id": 5002,
+      "share": 500,
+      "name": "B"
+    }
   ]
 }
 ```
 
 ### DELETE `/api/seg/:id`
 
-Delete a segment.
+Delete a segment (must be empty range `begin == end`).
 
-- **Method**: `DELETE`
-- **Content-Type**: `application/json`
-
-**Request Body**
+**Request**
 
 ```json
 {
@@ -549,40 +383,19 @@ Delete a segment.
 }
 ```
 
-The segment can only be deleted when `range_begin == range_end`.
-
-**Responses**
-
-- `204 No Content` on success.
-- `400 Bad Request` on invalid body.
-- `409 Conflict` if version does not match or segment is not empty.
-- `500 Internal Server Error` on database or transaction errors.
-
-On success, the owning layer `version` is incremented by 1.
+**Response (200 OK)**: Empty body.
 
 ### POST `/api/seg/:id/shuffle`
 
-Regenerate the segment seed used for hash slotting.
+Regenerate segment seed. No version check.
 
-- **Method**: `POST`
-
-**Responses**
-
-- `204 No Content` on success.
-- `400 Bad Request` if `id` is invalid.
-- `404 Not Found` if segment does not exist.
-- `500 Internal Server Error` on database errors.
-
-This operation does not change any `version` field.
+**Response (200 OK)**: Empty body.
 
 ### POST `/api/seg/:id/rebalance`
 
-Rebalance traffic between the default group and a specific group.
+Adjust traffic share between default and target group.
 
-- **Method**: `POST`
-- **Content-Type**: `application/json`
-
-**Request Body**
+**Request**
 
 ```json
 {
@@ -592,66 +405,31 @@ Rebalance traffic between the default group and a specific group.
 }
 ```
 
-- `grp_id` (uint32, required): Target non-default group ID.
-- `share` (uint32, required): Desired number of slots assigned to this group.
-
-The remaining slots are kept in the default group. The sum of both shares must
-match the current total; otherwise the request is rejected.
-
-**Responses**
-
-- `204 No Content` on success.
-- `400 Bad Request` on invalid body.
-- `403 Forbidden` if rebalance target is the default group or required share
-  exceeds total available slots.
-- `409 Conflict` if bitmap or version conflicts are detected.
-- `500 Internal Server Error` on database or transaction errors.
-
-On success, the segment `version` is incremented by 1.
+**Response (200 OK)**: Empty body.
 
 ---
 
 ### POST `/api/grp`
 
-Create a new group under a segment.
+Create a group (share 0).
 
-- **Method**: `POST`
-- **Content-Type**: `application/json`
-
-**Request Body**
+**Request**
 
 ```json
 {
   "seg_id": 4001,
   "seg_ver": 1,
-  "id": 0,
-  "share": 0,
-  "name": "variant-A",
-  "version": 0,
-  "description": "optional",
-  "force_hit": [],
-  "config": ""
+  "name": "variant-A"
 }
 ```
 
-**Responses**
-
-- `200 OK` with created group (share 0, version 0, config empty).
-- `400 Bad Request` if name is empty.
-- `409 Conflict` if segment version check fails.
-- `500 Internal Server Error` on database or transaction errors.
-
-On success, the owning segment `version` is incremented by 1.
+**Response (200 OK)**: Created group object.
 
 ### GET `/api/grp/:id`
 
-Get group details, including config and force-hit keys.
+Get group details.
 
-- **Method**: `GET`
-
-**Response**
-
-- `200 OK`:
+**Response (200 OK)**
 
 ```json
 {
@@ -661,53 +439,39 @@ Get group details, including config and force-hit keys.
   "is_default": false,
   "version": 1,
   "cfg_id": 7001,
-  "description": "optional",
-  "force_hit": ["user-1", "user-2"],
+  "force_hit": [
+    "u1",
+    "u2"
+  ],
   "config": "{...}"
 }
 ```
 
 ### PUT `/api/grp/:id`
 
-Update group metadata, force-hit keys and bound config ID.
+Update metadata, force-hit keys, and config ID.
 
-- **Method**: `PUT`
-- **Content-Type**: `application/json`
-
-**Request Body**
+**Request**
 
 ```json
 {
   "name": "variant-A",
-  "description": "optional",
-  "share": 300,
-  "is_default": false,
   "version": 1,
   "cfg_id": 7001,
-  "force_hit": ["user-1", "user-2"],
-  "config": "{...ignored on update...}"
+  "force_hit": [
+    "u1",
+    "u2"
+  ]
 }
 ```
 
-Only `name`, `description`, `force_hit` and `cfg_id` are updated; `share`
-and `config` are managed by other APIs.
-
-**Responses**
-
-- `200 OK` with refreshed group detail (including the new `version`).
-- `400 Bad Request` if name is empty or body invalid.
-- `404 Not Found` if group does not exist.
-- `409 Conflict` if version does not match.
-- `500 Internal Server Error` on database errors.
+**Response (200 OK)**: Updated group object.
 
 ### DELETE `/api/grp/:id`
 
-Delete a non-default group with zero share.
+Delete a non-default group (must have `share == 0`).
 
-- **Method**: `DELETE`
-- **Content-Type**: `application/json`
-
-**Request Body**
+**Request**
 
 ```json
 {
@@ -717,59 +481,35 @@ Delete a non-default group with zero share.
 }
 ```
 
-Group must be non-default and have `share == 0`.
-
-**Responses**
-
-- `204 No Content` on success.
-- `400 Bad Request` on invalid body.
-- `409 Conflict` if version mismatch or constraints not satisfied.
-- `500 Internal Server Error` on database or transaction errors.
-
-On success, the owning segment `version` is incremented by 1.
+**Response (200 OK)**: Empty body.
 
 ### GET `/api/grp/:id/cfg`
 
-List historical configs of a group since a given time.
+List historical configs.
 
-- **Method**: `GET`
-- **Query Parameters**:
-  - `begin` (int64, optional): Unix timestamp (seconds) for the earliest
-    `create_time` to include. Defaults to 0 if omitted.
+**Query**: `begin` (timestamp, optional).
 
-**Response**
-
-- `200 OK`:
+**Response (200 OK)**
 
 ```json
 [
-  { "id": 7001, "config": "{...}" },
-  { "id": 7002, "config": "{...}" }
+  {
+    "id": 7001,
+    "config": "{...}"
+  },
+  ...
 ]
 ```
 
 ### POST `/api/grp/:id/cfg`
 
-Create a new config record for a group.
+Create a new config. Body is raw config content.
 
-- **Method**: `POST`
-- **Content-Type**: arbitrary (raw body used as config string)
+**Request**: Arbitrary content (e.g., JSON).
 
-**Request Body**
-
-The entire HTTP body is treated as config content, for example:
-
+**Response (200 OK)**: 
 ```json
-{ "button_color": "red" }
+{ 
+  "id": 7003 
+}
 ```
-
-**Responses**
-
-- `200 OK`:
-
-```json
-{ "id": 7003 }
-```
-
-- `400 Bad Request` if body cannot be read.
-- `500 Internal Server Error` on database errors.

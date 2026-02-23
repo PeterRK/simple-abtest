@@ -4,7 +4,7 @@
       <el-button type="primary" size="small" @click="openLayerDialog('create')">Add Layer</el-button>
     </div>
     <el-collapse v-model="activeLayers">
-      <el-collapse-item v-for="layer in experiment?.layer" :key="layer.id" :name="layer.id">
+      <el-collapse-item v-for="layer in layers" :key="layer.id" :name="layer.id">
         <template #title>
            <div class="layer-title">
              <span>{{ layer.name }} (ID: {{ layer.id }})</span>
@@ -38,8 +38,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { createLyr, updateLyr, deleteLyr } from '@/api'
+import { ref, watch } from 'vue'
+import { createLyr, updateLyr, deleteLyr, getLayer } from '@/api'
 import type { Experiment, Layer } from '@/api/types'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import SegmentList from './SegmentList.vue'
@@ -51,6 +51,7 @@ const props = defineProps<{
 const emit = defineEmits(['refresh'])
 
 const activeLayers = ref<number[]>([])
+const layers = ref<Layer[]>([])
 
 const dialogVisible = ref(false)
 const dialogType = ref<'create' | 'edit'>('create')
@@ -70,6 +71,24 @@ const openLayerDialog = (type: 'create' | 'edit', row?: Layer) => {
     form.value = { name: '', description: '' }
   }
   dialogVisible.value = true
+}
+
+const loadLayers = async () => {
+  if (!props.experiment?.layer || props.experiment.layer.length === 0) {
+    layers.value = []
+    return
+  }
+  const results = await Promise.all(
+    props.experiment.layer.map(async layer => {
+      try {
+        const res = await getLayer(layer.id)
+        return res.data
+      } catch (e) {
+        return layer
+      }
+    })
+  )
+  layers.value = results as Layer[]
 }
 
 const handleSave = async () => {
@@ -113,6 +132,14 @@ const handleDeleteLayer = async (layer: Layer) => {
         // ignore
     }
 }
+
+watch(
+  () => props.experiment?.layer,
+  () => {
+    loadLayers()
+  },
+  { deep: true, immediate: true }
+)
 </script>
 
 <style scoped>

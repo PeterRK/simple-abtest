@@ -106,7 +106,7 @@ func segGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	resp := &struct {
 		segDetail
-		Group []grpSummary `json:"group"`
+		Group []grpSummary `json:"group,omitempty"`
 	}{}
 	resp.Id = uint32(id)
 
@@ -141,7 +141,7 @@ func segGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		resp.Group = append(resp.Group, grp)
 	}
 
-	utils.HttpReplyJson(w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
 }
 
 func createDefaultSegment(tx *sql.Tx, lyrId uint32) (uint32, error) {
@@ -159,13 +159,13 @@ func segCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		LyrId  uint32 `json:"lyr_id"`
 		LyrVer uint32 `json:"lyr_ver"`
 	}{}
-	if err := utils.HttpGetJsonArgs(r, req); err != nil {
+	if err := utils.HttpGetJsonArgsWithLog(r, req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{
-		Isolation: sql.LevelReadUncommitted, // 依赖乐观锁
+		Isolation: sql.LevelReadUncommitted,
 	})
 	if err != nil {
 		utils.GetLogger().Errorf("fail to start transaction: %v", err)
@@ -203,7 +203,7 @@ func segCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	resp.Begin = 100
 	resp.End = 100
 	resp.Version = 0
-	utils.HttpReplyJson(w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
 }
 
 func segDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
@@ -217,13 +217,13 @@ func segDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		LyrVer  uint32 `json:"lyr_ver"`
 		Version uint32 `json:"version"`
 	}{}
-	if err = utils.HttpGetJsonArgs(r, req); err != nil {
+	if err = utils.HttpGetJsonArgsWithLog(r, req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{
-		Isolation: sql.LevelReadUncommitted, // 依赖乐观锁
+		Isolation: sql.LevelReadUncommitted,
 	})
 	if err != nil {
 		utils.GetLogger().Errorf("fail to start transaction: %v", err)
@@ -287,7 +287,7 @@ func segRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		GrpId   uint32 `json:"grp_id"`
 		Share   uint32 `json:"share"`
 	}{}
-	if err = utils.HttpGetJsonArgs(r, req); err != nil {
+	if err = utils.HttpGetJsonArgsWithLog(r, req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -385,7 +385,7 @@ func segRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{
-		Isolation: sql.LevelReadUncommitted, // 依赖乐观锁
+		Isolation: sql.LevelReadUncommitted,
 	})
 	if err != nil {
 		utils.GetLogger().Errorf("fail to start transaction: %v", err)

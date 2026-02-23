@@ -79,12 +79,7 @@
         
         <el-table :data="configHistory" height="300px" style="margin-top: 10px">
             <el-table-column prop="id" label="ID" width="80" />
-            <el-table-column prop="create_time" label="Time">
-                 <template #default="{ row }">
-                     {{ new Date(row.create_time * 1000).toLocaleString() }}
-                 </template>
-            </el-table-column>
-            <el-table-column prop="content" label="Content" show-overflow-tooltip />
+            <el-table-column prop="config" label="Config" show-overflow-tooltip />
             <el-table-column label="Action" width="100">
                 <template #default="{ row }">
                      <el-button type="text" @click="applyConfig(row)">Apply</el-button>
@@ -139,19 +134,15 @@ const handleSave = async () => {
                 seg_id: props.segment.id,
                 seg_ver: props.segment.version!,
                 name: form.value.name,
-                description: form.value.description,
-                share: 0, // Initial share 0
-                force_hit: form.value.force_hit
+                description: form.value.description
             })
             ElMessage.success('Group created')
         } else if (currentGroup.value) {
             await updateGrp(currentGroup.value.id, {
                 name: form.value.name,
                 description: form.value.description,
-                share: currentGroup.value.share,
-                is_default: currentGroup.value.is_default,
                 version: currentGroup.value.version,
-                cfg_id: currentGroup.value.cfg_id,
+                cfg_id: form.value.cfg_id,
                 force_hit: form.value.force_hit
             })
             ElMessage.success('Group updated')
@@ -240,9 +231,11 @@ const handleCreateConfig = async () => {
         // Let's apply it by updating group.
         const newCfgId = res.data.id
         await updateGrp(activeGroup.value.id, {
-             ...activeGroup.value,
+             name: activeGroup.value.name,
+             description: activeGroup.value.description,
+             version: activeGroup.value.version,
              cfg_id: newCfgId,
-             force_hit: activeGroup.value.force_hit || [] // Ensure force_hit is passed
+             force_hit: activeGroup.value.force_hit || []
         })
         ElMessage.success('Config created and applied')
         showCreateConfig.value = false
@@ -258,7 +251,9 @@ const applyConfig = async (cfg: Config) => {
     if (!activeGroup.value) return
     try {
         await updateGrp(activeGroup.value.id, {
-             ...activeGroup.value,
+             name: activeGroup.value.name,
+             description: activeGroup.value.description,
+             version: activeGroup.value.version,
              cfg_id: cfg.id,
              force_hit: activeGroup.value.force_hit || []
         })

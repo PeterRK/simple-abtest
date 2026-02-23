@@ -30,7 +30,6 @@ const handleUpdate = async () => {
         await updateExp(experiment.value.id, {
             name: experiment.value.name,
             description: experiment.value.description,
-            status: experiment.value.status,
             version: experiment.value.version,
             filter: experiment.value.filter
         })

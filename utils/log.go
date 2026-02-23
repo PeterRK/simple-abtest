@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"sync/atomic"
 	"unsafe"
 
@@ -60,15 +61,21 @@ func InitLog(path string, maxBackups, maxDays int) {
 	logger.level = zap.NewAtomicLevel()
 	cfg := zap.NewProductionEncoderConfig()
 	cfg.EncodeTime = zapcore.RFC3339TimeEncoder
-	logger.entry = zap.New(zapcore.NewCore(
-		zapcore.NewJSONEncoder(cfg),
-		zapcore.AddSync(&lumberjack.Logger{
+
+	var writer io.Writer = os.Stderr
+	if len(path) != 0 {
+		writer = &lumberjack.Logger{
 			Filename:   path,
 			MaxSize:    256,
 			MaxBackups: maxBackups,
 			MaxAge:     maxDays,
 			Compress:   true,
-		}), logger.level))
+		}
+	}
+
+	logger.entry = zap.New(zapcore.NewCore(
+		zapcore.NewJSONEncoder(cfg),
+		zapcore.AddSync(writer), logger.level))
 	logger.sugar = logger.entry.Sugar()
 }
 

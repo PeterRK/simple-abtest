@@ -17,12 +17,12 @@ export const updateApp = (id: number, data: { name: string; description?: string
 export const deleteApp = (id: number, data: { version: number }) => adminApi.delete(`/app/${id}`, { data })
 
 // Experiment
-export const createExp = (data: { app_id: number; app_ver: number; name: string; description?: string; filter?: any[] }) => adminApi.post<Experiment>('/exp', data)
+export const createExp = (data: { app_id: number; app_ver: number; name: string; description?: string }) => adminApi.post<Experiment>('/exp', data)
 export const getExp = (id: number) => adminApi.get<Experiment>(`/exp/${id}`)
-export const updateExp = (id: number, data: { name: string; description?: string; status: number; version: number; filter?: any[] }) => adminApi.put<Experiment>(`/exp/${id}`, data)
+export const updateExp = (id: number, data: { name: string; description?: string; version: number; filter?: any[] }) => adminApi.put<Experiment>(`/exp/${id}`, data)
 export const deleteExp = (id: number, data: { app_id: number; app_ver: number; version: number }) => adminApi.delete(`/exp/${id}`, { data })
 export const shuffleExp = (id: number) => adminApi.post(`/exp/${id}/shuffle`)
-export const switchExp = (id: number, data: { status: number; version: number }) => adminApi.put(`/exp/${id}/switch`, data)
+export const switchExp = (id: number, data: { status: number; version: number }) => adminApi.put(`/exp/${id}/status`, data)
 
 // Layer
 export const createLayer = (data: { exp_id: number; exp_ver: number; name: string; description?: string }) => adminApi.post<Layer>('/lyr', data)
@@ -39,9 +39,9 @@ export const shuffleSegment = (id: number) => adminApi.post(`/seg/${id}/shuffle`
 export const rebalanceSegment = (id: number, data: { version: number; grp_id: number; share: number }) => adminApi.post(`/seg/${id}/rebalance`, data)
 
 // Group
-export const createGroup = (data: { seg_id: number; seg_ver: number; name: string; description?: string; share: number; force_hit?: string[]; config?: string }) => adminApi.post<Group>('/grp', data)
+export const createGroup = (data: { seg_id: number; seg_ver: number; name: string; description?: string }) => adminApi.post<Group>('/grp', data)
 export const getGroup = (id: number) => adminApi.get<Group>(`/grp/${id}`)
-export const updateGroup = (id: number, data: { name: string; description?: string; share: number; is_default: boolean; version: number; cfg_id: number; force_hit?: string[]; config?: string }) => adminApi.put<Group>(`/grp/${id}`, data)
+export const updateGroup = (id: number, data: { name: string; description?: string; version: number; cfg_id: number; force_hit?: string[] }) => adminApi.put<Group>(`/grp/${id}`, data)
 export const deleteGroup = (id: number, data: { seg_id: number; seg_ver: number; version: number }) => adminApi.delete(`/grp/${id}`, { data })
 
 // Config

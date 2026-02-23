@@ -3,11 +3,11 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"math/rand/v2"
 	"net/http"
 	"strconv"
 
-	json "github.com/goccy/go-json"
 	"github.com/julienschmidt/httprouter"
 	"github.com/peterrk/simple-abtest/engine/core"
 	"github.com/peterrk/simple-abtest/utils"
@@ -33,7 +33,7 @@ func prepareExpSql(db *sql.DB) (err error) {
 		return err
 	}
 	expSql.getList, err = db.Prepare(
-		"SELECT `exp_id`,`name`,`status` FROM `experiment` " +
+		"SELECT `exp_id`,`name`,`description`,`status` FROM `experiment` " +
 			"WHERE `app_id`=?")
 	if err != nil {
 		return err
@@ -45,8 +45,8 @@ func prepareExpSql(db *sql.DB) (err error) {
 		return err
 	}
 	expSql.create, err = db.Prepare(
-		"INSERT INTO `experiment`(`app_id`,`name`,`description`,`seed`,`filter`) " +
-			"VALUES (?,?,?,?,?)")
+		"INSERT INTO `experiment`(`app_id`,`name`,`description`,`seed`) " +
+			"VALUES (?,?,?,?)")
 	if err != nil {
 		return err
 	}
@@ -83,12 +83,12 @@ type expSummary struct {
 	Id     uint32 `json:"id"`
 	Status uint8  `json:"status"`
 	Name   string `json:"name"`
+	Desc   string `json:"description,omitempty"`
 }
 
 type expDetail struct {
 	expSummary
 	Version uint32          `json:"version"`
-	Desc    string          `json:"description,omitempty"`
 	Filter  []core.ExprNode `json:"filter,omitempty"`
 }
 
@@ -99,7 +99,7 @@ func bindExpOp(router *httprouter.Router, registry *prometheus.Registry) {
 	router.Handle(http.MethodDelete, "/api/exp/:id", expDelete)
 
 	router.Handle(http.MethodPost, "/api/exp/:id/shuffle", expShuffle)
-	router.Handle(http.MethodPut, "/api/exp/:id/switch", expSwitch)
+	router.Handle(http.MethodPut, "/api/exp/:id/status", expSwitch)
 }
 
 func expGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
@@ -122,7 +122,7 @@ func expGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	resp := &struct {
 		expDetail
-		Layer []lyrSummary `json:"layer"`
+		Layer []lyrSummary `json:"layer,omitempty"`
 	}{}
 	resp.Id = uint32(id)
 
@@ -139,11 +139,13 @@ func expGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	err = json.Unmarshal(filter, &resp.Filter)
-	if err != nil {
-		utils.GetLogger().Errorf("broken filter json in experiment %d", id)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+	if len(filter) != 0 {
+		err = json.Unmarshal(filter, &resp.Filter)
+		if err != nil {
+			utils.GetLogger().Errorf("broken filter json in experiment %d", id)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 	}
 
 	rows, err := tx.Stmt(lyrSql.getList).Query(resp.Id)
@@ -164,34 +166,23 @@ func expGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		}
 		resp.Layer = append(resp.Layer, lyr)
 	}
-
-	utils.HttpReplyJson(w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
 }
 
 func expCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	req := &struct {
 		AppId  uint32 `json:"app_id"`
 		AppVer uint32 `json:"app_ver"`
-		expDetail
+		expSummary
 	}{}
-	err := utils.HttpGetJsonArgs(r, req)
+	err := utils.HttpGetJsonArgsWithLog(r, req)
 	if err != nil || len(req.Name) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	filter, err := json.Marshal(&req.Filter)
-	if err == nil {
-		_, err = core.ParseExpr(filter)
-	}
-	if err != nil {
-		utils.GetLogger().Warn("illegal filter json: %v", req.Filter)
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
 	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{
-		Isolation: sql.LevelReadUncommitted, // 依赖乐观锁
+		Isolation: sql.LevelReadUncommitted,
 	})
 	if err != nil {
 		utils.GetLogger().Errorf("fail to start transaction: %v", err)
@@ -201,14 +192,14 @@ func expCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	defer tx.Rollback()
 
 	id, err := utils.SqlCreate(tx.Stmt(expSql.create),
-		req.AppId, req.Name, req.Desc, rand.Uint32(), filter)
+		req.AppId, req.Name, req.Desc, rand.Uint32())
 	if err != nil {
 		utils.GetLogger().Errorf("fail to run sql[exp.create]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	if _, err = createLayer(tx, uint32(id), req.Name, ""); err != nil {
+	if _, err = createLayer(tx, uint32(id), req.Name); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -224,11 +215,13 @@ func expCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	resp := &req.expDetail
+	resp := &expDetail{}
+	resp.Name = req.Name
+	resp.Desc = req.Desc
 	resp.Id = uint32(id)
 	resp.Status = 0
 	resp.Version = 0
-	utils.HttpReplyJson(w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
 }
 
 func expUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
@@ -239,7 +232,7 @@ func expUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	req := &expDetail{}
-	err = utils.HttpGetJsonArgs(r, req)
+	err = utils.HttpGetJsonArgsWithLog(r, req)
 	if err != nil || len(req.Name) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -251,7 +244,7 @@ func expUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		_, err = core.ParseExpr(filter)
 	}
 	if err != nil {
-		utils.GetLogger().Warn("illegal filter json: %v", req.Filter)
+		utils.GetLogger().Warnf("illegal filter json: %v", req.Filter)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -284,14 +277,16 @@ func expUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	err = json.Unmarshal(filter, &resp.Filter)
-	if err != nil {
-		utils.GetLogger().Errorf("broken filter json in experiment %d", id)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+	if len(filter) != 0 {
+		err = json.Unmarshal(filter, &resp.Filter)
+		if err != nil {
+			utils.GetLogger().Errorf("broken filter json in experiment %d", id)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 	}
 
-	utils.HttpReplyJson(w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
 }
 
 func expDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
@@ -305,13 +300,13 @@ func expDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		AppVer  uint32 `json:"app_ver"`
 		Version uint32 `json:"version"`
 	}{}
-	if err = utils.HttpGetJsonArgs(r, req); err != nil {
+	if err = utils.HttpGetJsonArgsWithLog(r, req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{
-		Isolation: sql.LevelReadUncommitted, // 依赖乐观锁
+		Isolation: sql.LevelReadUncommitted,
 	})
 	if err != nil {
 		utils.GetLogger().Errorf("fail to start transaction: %v", err)
@@ -374,7 +369,7 @@ func expSwitch(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		Status  uint8  `json:"status"`
 		Version uint32 `json:"version"`
 	}{}
-	if err = utils.HttpGetJsonArgs(r, req); err != nil {
+	if err = utils.HttpGetJsonArgsWithLog(r, req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}

@@ -59,8 +59,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { createSeg, deleteSeg, shuffleSeg, rebalanceLyr } from '@/api'
+import { ref, computed, watch } from 'vue'
+import { createSeg, deleteSeg, shuffleSeg, rebalanceLyr, getSegment } from '@/api'
 import type { Layer, Segment } from '@/api/types'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import GroupList from './GroupList.vue'
@@ -71,7 +71,8 @@ const props = defineProps<{
 
 const emit = defineEmits(['refresh'])
 
-const segments = computed(() => props.layer.segment || [])
+const segmentDetails = ref<Segment[]>([])
+const segments = computed(() => segmentDetails.value)
 
 // Random colors for visualization
 const colors = ['#409EFF', '#67C23A', '#E6A23C', '#F56C6C', '#909399', '#36cfc9', '#9254de', '#f759ab']
@@ -90,6 +91,24 @@ const handleAddSegment = async () => {
     } catch (e) {
         // ignore
     }
+}
+
+const loadSegments = async () => {
+  if (!props.layer.segment || props.layer.segment.length === 0) {
+    segmentDetails.value = []
+    return
+  }
+  const results = await Promise.all(
+    props.layer.segment.map(async seg => {
+      try {
+        const res = await getSegment(seg.id)
+        return res.data
+      } catch (e) {
+        return seg
+      }
+    })
+  )
+  segmentDetails.value = results as Segment[]
 }
 
 const handleDelete = async (seg: Segment) => {
@@ -115,6 +134,14 @@ const handleShuffle = async (seg: Segment) => {
         // ignore
     }
 }
+
+watch(
+  () => props.layer.segment,
+  () => {
+    loadSegments()
+  },
+  { deep: true, immediate: true }
+)
 
 // Rebalance
 interface RebalanceItem {

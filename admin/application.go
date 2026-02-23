@@ -85,7 +85,7 @@ func appGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 	defer rows.Close()
 
-	var resp []appSummary
+	resp := make([]appSummary, 0)
 	for rows.Next() {
 		var rec appSummary
 		err := rows.Scan(&rec.Id, &rec.Name)
@@ -96,7 +96,7 @@ func appGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		}
 		resp = append(resp, rec)
 	}
-	utils.HttpReplyJson(w, http.StatusOK, &resp)
+	utils.HttpReplyJsonWithLog(w, http.StatusOK, &resp)
 }
 
 func appGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
@@ -119,7 +119,7 @@ func appGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	resp := &struct {
 		appDetail
-		Experiment []expSummary `json:"experiment"`
+		Experiment []expSummary `json:"experiment,omitempty"`
 	}{}
 	resp.Id = uint32(id)
 
@@ -145,7 +145,7 @@ func appGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	for rows.Next() {
 		var exp expSummary
-		err = rows.Scan(&exp.Id, &exp.Name, &exp.Status)
+		err = rows.Scan(&exp.Id, &exp.Name, &exp.Desc, &exp.Status)
 		if err != nil {
 			utils.GetLogger().Errorf("fail to run sql[exp.getList]: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -154,12 +154,12 @@ func appGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		resp.Experiment = append(resp.Experiment, exp)
 	}
 
-	utils.HttpReplyJson(w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
 }
 
 func appCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	req := &appDetail{}
-	err := utils.HttpGetJsonArgs(r, req)
+	err := utils.HttpGetJsonArgsWithLog(r, req)
 	if err != nil || len(req.Name) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -175,7 +175,7 @@ func appCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	resp := req
 	resp.Id = uint32(id)
 	resp.Version = 0
-	utils.HttpReplyJson(w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
 }
 
 func appUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
@@ -186,7 +186,7 @@ func appUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	req := &appDetail{}
-	err = utils.HttpGetJsonArgs(r, req)
+	err = utils.HttpGetJsonArgsWithLog(r, req)
 	if err != nil || len(req.Name) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -208,7 +208,7 @@ func appUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	resp := req
 	resp.Version++
-	utils.HttpReplyJson(w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
 }
 
 func appDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
@@ -220,7 +220,7 @@ func appDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	req := &struct {
 		Version uint32 `json:"version"`
 	}{}
-	if err = utils.HttpGetJsonArgs(r, req); err != nil {
+	if err = utils.HttpGetJsonArgsWithLog(r, req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}

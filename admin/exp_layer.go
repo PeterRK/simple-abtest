@@ -27,19 +27,19 @@ func prepareLyrSql(db *sql.DB) (err error) {
 		return err
 	}
 	lyrSql.getOne, err = db.Prepare(
-		"SELECT `name`,`description`,`version` FROM `exp_layer` " +
+		"SELECT `name`,`version` FROM `exp_layer` " +
 			"WHERE `lyr_id`=?")
 	if err != nil {
 		return err
 	}
 	lyrSql.create, err = db.Prepare(
-		"INSERT INTO `exp_layer`(`exp_id`,`name`,`description`) " +
-			"VALUES (?,?,?)")
+		"INSERT INTO `exp_layer`(`exp_id`,`name`) " +
+			"VALUES (?,?)")
 	if err != nil {
 		return err
 	}
 	lyrSql.update, err = db.Prepare(
-		"UPDATE `exp_layer` SET `name`=?,`description`=?,`version`=? " +
+		"UPDATE `exp_layer` SET `name`=?,`version`=? " +
 			"WHERE `lyr_id`=? AND `version`=?")
 	if err != nil {
 		return err
@@ -65,7 +65,6 @@ type lyrSummary struct {
 type lyrDetail struct {
 	lyrSummary
 	Version uint32 `json:"version"`
-	Desc    string `json:"description,omitempty"`
 }
 
 func bindLyrOp(router *httprouter.Router, registry *prometheus.Registry) {
@@ -101,8 +100,7 @@ func lyrGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}{}
 	resp.Id = uint32(id)
 
-	err = tx.Stmt(lyrSql.getOne).QueryRow(id).Scan(
-		&resp.Name, &resp.Desc, &resp.Version)
+	err = tx.Stmt(lyrSql.getOne).QueryRow(id).Scan(&resp.Name, &resp.Version)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			w.WriteHeader(http.StatusNotFound)
@@ -132,11 +130,11 @@ func lyrGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		resp.Segment = append(resp.Segment, seg)
 	}
 
-	utils.HttpReplyJson(w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
 }
 
-func createLayer(tx *sql.Tx, expId uint32, name, desc string) (uint32, error) {
-	id, err := utils.SqlCreate(tx.Stmt(lyrSql.create), expId, name, desc)
+func createLayer(tx *sql.Tx, expId uint32, name string) (uint32, error) {
+	id, err := utils.SqlCreate(tx.Stmt(lyrSql.create), expId, name)
 	if err != nil {
 		utils.GetLogger().Errorf("fail to run sql[lyr.create]: %v", err)
 	} else {
@@ -149,16 +147,16 @@ func lyrCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	req := &struct {
 		ExpId  uint32 `json:"exp_id"`
 		ExpVer uint32 `json:"exp_ver"`
-		lyrDetail
+		lyrSummary
 	}{}
-	err := utils.HttpGetJsonArgs(r, req)
+	err := utils.HttpGetJsonArgsWithLog(r, req)
 	if err != nil || len(req.Name) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{
-		Isolation: sql.LevelReadUncommitted, // 依赖乐观锁
+		Isolation: sql.LevelReadUncommitted,
 	})
 	if err != nil {
 		utils.GetLogger().Errorf("fail to start transaction: %v", err)
@@ -167,7 +165,7 @@ func lyrCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 	defer tx.Rollback()
 
-	id, err := createLayer(tx, req.ExpId, req.Name, req.Desc)
+	id, err := createLayer(tx, req.ExpId, req.Name)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -184,10 +182,11 @@ func lyrCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	resp := &req.lyrDetail
+	resp := &lyrDetail{}
+	resp.Name = req.Name
 	resp.Id = uint32(id)
 	resp.Version = 0
-	utils.HttpReplyJson(w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
 }
 
 func lyrUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
@@ -198,14 +197,14 @@ func lyrUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	req := &lyrDetail{}
-	err = utils.HttpGetJsonArgs(r, req)
+	err = utils.HttpGetJsonArgsWithLog(r, req)
 	if err != nil || len(req.Name) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	req.Id = uint32(id)
 
-	n, err := utils.SqlModify(lyrSql.update, req.Name, req.Desc,
+	n, err := utils.SqlModify(lyrSql.update, req.Name,
 		req.Version+1, req.Id, req.Version)
 	if err != nil {
 		utils.GetLogger().Errorf("fail to run sql[lyr.update]: %v", err)
@@ -220,7 +219,7 @@ func lyrUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	resp := req
 	resp.Version++
-	utils.HttpReplyJson(w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
 }
 
 func lyrDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
@@ -234,13 +233,13 @@ func lyrDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		ExpVer  uint32 `json:"exp_ver"`
 		Version uint32 `json:"version"`
 	}{}
-	if err = utils.HttpGetJsonArgs(r, req); err != nil {
+	if err = utils.HttpGetJsonArgsWithLog(r, req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{
-		Isolation: sql.LevelReadUncommitted, // 依赖乐观锁
+		Isolation: sql.LevelReadUncommitted,
 	})
 	if err != nil {
 		utils.GetLogger().Errorf("fail to start transaction: %v", err)
@@ -281,9 +280,9 @@ func lyrRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 	req := &struct {
 		Version uint32       `json:"version"`
-		Segment []segSummary `json:"segment"`
+		Segment []segSummary `json:"segment,omitempty"`
 	}{}
-	err = utils.HttpGetJsonArgs(r, req)
+	err = utils.HttpGetJsonArgsWithLog(r, req)
 	if err != nil || len(req.Segment) < 2 ||
 		req.Segment[0].Begin != 0 || req.Segment[len(req.Segment)-1].End != 100 {
 		w.WriteHeader(http.StatusBadRequest)
@@ -334,7 +333,7 @@ func lyrRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{
-		Isolation: sql.LevelReadUncommitted, // 依赖乐观锁
+		Isolation: sql.LevelReadUncommitted,
 	})
 	if err != nil {
 		utils.GetLogger().Errorf("fail to start transaction: %v", err)

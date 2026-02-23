@@ -42,7 +42,6 @@ type grpDetail struct {
 	grpSummary
 	Version  uint32   `json:"version"`
 	CfgId    uint32   `json:"cfg_id,omitempty"`
-	Desc     string   `json:"description,omitempty"`
 	ForceHit []string `json:"force_hit,omitempty"`
 	Config   string   `json:"config,omitempty"`
 }
@@ -61,7 +60,7 @@ func prepareGrpSql(db *sql.DB) (err error) {
 	}
 	grpSql.getOne, err = db.Prepare("SELECT t1.*," +
 		"COALESCE(`content`,'') AS `content` FROM " +
-		"(SELECT `name`,`description`,`share`,`is_default`,`force_hit`," +
+		"(SELECT `name`,`share`,`is_default`,`force_hit`," +
 		"`version`,`cfg_id` FROM `exp_group` WHERE `grp_id`=? ) t1 " +
 		"LEFT JOIN " +
 		"( SELECT `cfg_id`,`content` FROM `exp_config` ) t2 " +
@@ -70,13 +69,13 @@ func prepareGrpSql(db *sql.DB) (err error) {
 		return err
 	}
 	grpSql.create, err = db.Prepare(
-		"INSERT INTO `exp_group`(`seg_id`,`name`,`description`," +
-			"`share`,`bitmap`,`is_default`) VALUES (?,?,?,?,?,?)")
+		"INSERT INTO `exp_group`(`seg_id`,`name`," +
+			"`share`,`bitmap`,`is_default`) VALUES (?,?,?,?,?)")
 	if err != nil {
 		return err
 	}
 	grpSql.update, err = db.Prepare(
-		"UPDATE `exp_group` SET `name`=?,`description`=?,`force_hit`=?," +
+		"UPDATE `exp_group` SET `name`=?,`force_hit`=?," +
 			"`cfg_id`=?,`version`=? WHERE `grp_id`=? AND `version`=?")
 	if err != nil {
 		return err
@@ -141,7 +140,7 @@ func grpGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	resp.Id = uint32(id)
 
 	var forceHit string
-	err = grpSql.getOne.QueryRow(id).Scan(&resp.Name, &resp.Desc,
+	err = grpSql.getOne.QueryRow(id).Scan(&resp.Name,
 		&resp.Share, &resp.IsDefault, &forceHit,
 		&resp.Version, &resp.CfgId, &resp.Config)
 	if err != nil {
@@ -157,7 +156,7 @@ func grpGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		resp.ForceHit = strings.Split(forceHit, ",")
 	}
 
-	utils.HttpReplyJson(w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
 }
 
 func createDefultGroup(tx *sql.Tx, segId uint32) (uint32, error) {
@@ -166,7 +165,7 @@ func createDefultGroup(tx *sql.Tx, segId uint32) (uint32, error) {
 		bitmap[i] = 0xff
 	}
 	id, err := utils.SqlCreate(tx.Stmt(grpSql.create),
-		segId, "DEFAULT", "", 1000, bitmap[:], true)
+		segId, "DEFAULT", 1000, bitmap[:], true)
 	if err != nil {
 		utils.GetLogger().Errorf("fail to run sql[grp.create]: %v", err)
 	}
@@ -177,16 +176,16 @@ func grpCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	req := &struct {
 		SegId  uint32 `json:"seg_id"`
 		SegVer uint32 `json:"seg_ver"`
-		grpDetail
+		grpSummary
 	}{}
-	err := utils.HttpGetJsonArgs(r, req)
+	err := utils.HttpGetJsonArgsWithLog(r, req)
 	if err != nil || len(req.Name) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{
-		Isolation: sql.LevelReadUncommitted, // 依赖乐观锁
+		Isolation: sql.LevelReadUncommitted,
 	})
 	if err != nil {
 		utils.GetLogger().Errorf("fail to start transaction: %v", err)
@@ -197,7 +196,7 @@ func grpCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	var bitmap [125]byte //zeros
 	id, err := utils.SqlCreate(tx.Stmt(grpSql.create),
-		req.SegId, req.Name, req.Desc, 0, bitmap[:], false)
+		req.SegId, req.Name, 0, bitmap[:], false)
 	if err != nil {
 		utils.GetLogger().Errorf("fail to run sql[grp.create]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -215,13 +214,14 @@ func grpCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	resp := &req.grpDetail
+	resp := &grpDetail{}
+	resp.Name = req.Name
 	resp.Id = uint32(id)
 	resp.Share = 0
 	resp.CfgId = 0
 	resp.Config = ""
 	resp.Version = 0
-	utils.HttpReplyJson(w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
 }
 
 func grpUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
@@ -232,14 +232,14 @@ func grpUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	req := &grpDetail{}
-	err = utils.HttpGetJsonArgs(r, req)
+	err = utils.HttpGetJsonArgsWithLog(r, req)
 	if err != nil || len(req.Name) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	req.Id = uint32(id)
 
-	n, err := utils.SqlModify(grpSql.update, req.Name, req.Desc,
+	n, err := utils.SqlModify(grpSql.update, req.Name,
 		strings.Join(req.ForceHit, ","), req.CfgId,
 		req.Version+1, req.Id, req.Version)
 	if err != nil {
@@ -257,7 +257,7 @@ func grpUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	resp.Id = uint32(id)
 
 	var forceHit string
-	err = grpSql.getOne.QueryRow(id).Scan(&resp.Name, &resp.Desc,
+	err = grpSql.getOne.QueryRow(id).Scan(&resp.Name,
 		&resp.Share, &resp.IsDefault, &forceHit,
 		&resp.Version, &resp.CfgId, &resp.Config)
 	if err != nil {
@@ -273,7 +273,7 @@ func grpUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		resp.ForceHit = strings.Split(forceHit, ",")
 	}
 
-	utils.HttpReplyJson(w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
 }
 
 func grpDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
@@ -287,13 +287,13 @@ func grpDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		SegVer  uint32 `json:"seg_ver"`
 		Version uint32 `json:"version"`
 	}{}
-	if err = utils.HttpGetJsonArgs(r, req); err != nil {
+	if err = utils.HttpGetJsonArgsWithLog(r, req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{
-		Isolation: sql.LevelReadUncommitted, // 依赖乐观锁
+		Isolation: sql.LevelReadUncommitted,
 	})
 	if err != nil {
 		utils.GetLogger().Errorf("fail to start transaction: %v", err)
@@ -361,7 +361,7 @@ func cfgGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		}
 		resp = append(resp, rec)
 	}
-	utils.HttpReplyJson(w, http.StatusOK, &resp)
+	utils.HttpReplyJsonWithLog(w, http.StatusOK, &resp)
 }
 
 func cfgCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
@@ -385,5 +385,5 @@ func cfgCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	resp := &cfgSummary{Id: uint32(id)}
-	utils.HttpReplyJson(w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
 }

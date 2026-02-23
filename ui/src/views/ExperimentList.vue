@@ -14,22 +14,23 @@ const loading = ref(false)
 // App Dialog
 const appDialogVisible = ref(false)
 const appForm = ref({ name: '', description: '' })
-const isEditApp = ref(false)
+const appDialogMode = ref<'create' | 'detail'>('create')
 const currentApp = ref<Application | null>(null)
 
 // Exp Dialog
 const expDialogVisible = ref(false)
-const expForm = ref({ name: '', description: '', filter: '[]' })
+const expForm = ref({ name: '', description: '' })
 
 const loadApps = async () => {
   try {
     const res = await getApps()
     apps.value = res.data
-    if (apps.value.length > 0 && !selectedAppId.value) {
-      const firstApp = apps.value[0]
-      if (firstApp) {
-          selectedAppId.value = firstApp.id
-          await loadExperiments()
+    if (selectedAppId.value) {
+      const exists = apps.value.find(a => a.id === selectedAppId.value)
+      if (!exists) {
+        selectedAppId.value = null
+        currentApp.value = null
+        experiments.value = []
       }
     }
   } catch (e) {
@@ -39,19 +40,32 @@ const loadApps = async () => {
 }
 
 const loadExperiments = async () => {
-  if (!selectedAppId.value) return
+  if (!selectedAppId.value) {
+    experiments.value = []
+    currentApp.value = null
+    return
+  }
   loading.value = true
   try {
-    const res = await getApp(selectedAppId.value)
-    if (res.data.experiment) {
-      experiments.value = res.data.experiment
-    } else {
-      experiments.value = []
+    const appId = selectedAppId.value
+    const res = await getApp(appId)
+    experiments.value = res.data.experiment ? res.data.experiment : []
+
+    currentApp.value = {
+      id: res.data.id,
+      name: res.data.name,
+      version: res.data.version,
+      description: res.data.description,
+      experiment: res.data.experiment
     }
-    // Update current app version
-    const app = apps.value.find(a => a.id === selectedAppId.value)
+
+    const index = apps.value.findIndex(a => a.id === appId)
+    const app = index !== -1 ? apps.value[index] : undefined
     if (app) {
-        app.version = res.data.version
+      app.name = res.data.name
+      app.description = res.data.description
+      app.version = res.data.version
+      app.experiment = res.data.experiment
     }
   } catch (e) {
     console.error(e)
@@ -66,47 +80,76 @@ const handleAppChange = () => {
 }
 
 const showCreateApp = () => {
-  isEditApp.value = false
+  appDialogMode.value = 'create'
+  currentApp.value = null
   appForm.value = { name: '', description: '' }
   appDialogVisible.value = true
 }
 
-const showEditApp = () => {
+const showAppDetail = () => {
   const app = apps.value.find(a => a.id === selectedAppId.value)
   if (!app) return
-  isEditApp.value = true
+  appDialogMode.value = 'detail'
   currentApp.value = app
   appForm.value = { name: app.name, description: app.description || '' }
   appDialogVisible.value = true
 }
 
-const handleAppSubmit = async () => {
+const handleCreateApp = async () => {
   try {
-    if (isEditApp.value && currentApp.value) {
-      await updateApp(currentApp.value.id, {
-        name: appForm.value.name,
-        description: appForm.value.description,
-        version: currentApp.value.version
-      })
-      ElMessage.success('App updated')
-    } else {
-      await createApp(appForm.value)
-      ElMessage.success('App created')
+    const res = await createApp(appForm.value)
+    const created = res.data
+    selectedAppId.value = created.id
+    currentApp.value = {
+      id: created.id,
+      name: created.name,
+      version: created.version,
+      description: created.description,
+      experiment: created.experiment
     }
+    ElMessage.success('App created')
     appDialogVisible.value = false
-    loadApps()
+    await loadApps()
+    await loadExperiments()
   } catch (e) {
     ElMessage.error('Operation failed')
   }
 }
 
-const handleDeleteApp = async () => {
-  const app = apps.value.find(a => a.id === selectedAppId.value)
-  if (!app) return
+const handleUpdateApp = async () => {
+  if (!currentApp.value) return
+  if (currentApp.value.version == null) {
+    ElMessage.error('App version is missing')
+    return
+  }
   try {
-    await ElMessageBox.confirm('Delete this app?', 'Warning', { type: 'warning' })
+    await updateApp(currentApp.value.id, {
+      name: appForm.value.name,
+      description: appForm.value.description,
+      version: currentApp.value.version
+    })
+    ElMessage.success('App updated')
+    currentApp.value.name = appForm.value.name
+    currentApp.value.description = appForm.value.description
+    currentApp.value.version = currentApp.value.version + 1
+    appDialogVisible.value = false
+  } catch (e) {
+    ElMessage.error('Update failed')
+  }
+}
+
+const handleDeleteAppInDialog = async () => {
+  const app = currentApp.value
+  if (!app) return
+  if (app.version == null) {
+    ElMessage.error('App version is missing')
+    return
+  }
+  try {
+    await ElMessageBox.confirm('确定删除该应用？', '提示', { type: 'warning' })
     await deleteApp(app.id, { version: app.version })
     ElMessage.success('App deleted')
+    appDialogVisible.value = false
     selectedAppId.value = null
     loadApps()
   } catch (e) {
@@ -115,28 +158,23 @@ const handleDeleteApp = async () => {
 }
 
 const showCreateExp = () => {
-  expForm.value = { name: '', description: '', filter: '[]' }
+  expForm.value = { name: '', description: '' }
   expDialogVisible.value = true
 }
 
 const handleExpSubmit = async () => {
   const app = apps.value.find(a => a.id === selectedAppId.value)
   if (!app) return
+  if (app.version == null) {
+    ElMessage.error('App version is missing')
+    return
+  }
   try {
-    let filter = []
-    try {
-        filter = JSON.parse(expForm.value.filter)
-    } catch(e) {
-        ElMessage.error('Invalid filter JSON')
-        return
-    }
-
     await createExp({
       app_id: app.id,
       app_ver: app.version,
       name: expForm.value.name,
-      description: expForm.value.description,
-      filter: filter
+      description: expForm.value.description
     })
     ElMessage.success('Experiment created')
     expDialogVisible.value = false
@@ -175,13 +213,12 @@ onMounted(() => {
           <el-option v-for="app in apps" :key="app.id" :label="`${app.name} (${app.id})`" :value="app.id" />
         </el-select>
         <el-button-group class="ml-2">
-            <el-button @click="showCreateApp">New App</el-button>
-            <el-button :disabled="!selectedAppId" @click="showEditApp">Edit App</el-button>
-            <el-button :disabled="!selectedAppId" type="danger" @click="handleDeleteApp">Delete App</el-button>
+            <el-button @click="showCreateApp">新增</el-button>
+            <el-button :disabled="!selectedAppId" @click="showAppDetail">详情</el-button>
         </el-button-group>
       </div>
       <div class="right">
-        <el-button type="primary" :disabled="!selectedAppId" @click="showCreateExp">New Experiment</el-button>
+        <el-button type="primary" :disabled="!selectedAppId" @click="showCreateExp">新增实验</el-button>
       </div>
     </div>
 
@@ -203,18 +240,27 @@ onMounted(() => {
     </el-table>
 
     <!-- App Dialog -->
-    <el-dialog v-model="appDialogVisible" :title="isEditApp ? 'Edit App' : 'New App'">
+    <el-dialog v-model="appDialogVisible" :title="appDialogMode === 'create' ? '新增应用' : '应用详情'">
       <el-form :model="appForm">
-        <el-form-item label="Name">
+        <el-form-item v-if="appDialogMode === 'detail' && currentApp" label="ID">
+          <span>{{ currentApp.id }}</span>
+        </el-form-item>
+        <el-form-item label="名称">
           <el-input v-model="appForm.name" />
         </el-form-item>
-        <el-form-item label="Description">
+        <el-form-item label="描述">
           <el-input v-model="appForm.description" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="appDialogVisible = false">Cancel</el-button>
-        <el-button type="primary" @click="handleAppSubmit">Confirm</el-button>
+        <el-button @click="appDialogVisible = false">取消</el-button>
+        <template v-if="appDialogMode === 'detail'">
+          <el-button type="primary" @click="handleUpdateApp">更新</el-button>
+          <el-button type="danger" @click="handleDeleteAppInDialog">删除</el-button>
+        </template>
+        <template v-else>
+          <el-button type="primary" @click="handleCreateApp">确定</el-button>
+        </template>
       </template>
     </el-dialog>
 
@@ -226,9 +272,6 @@ onMounted(() => {
         </el-form-item>
         <el-form-item label="Description">
           <el-input v-model="expForm.description" />
-        </el-form-item>
-        <el-form-item label="Filter (JSON)">
-          <el-input v-model="expForm.filter" type="textarea" :rows="3" />
         </el-form-item>
       </el-form>
       <template #footer>

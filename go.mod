@@ -4,7 +4,6 @@ go 1.26
 
 require (
 	github.com/go-sql-driver/mysql v1.9.3
-	github.com/goccy/go-json v0.10.5
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/prometheus/client_golang v1.23.2
 	go.uber.org/zap v1.27.1
