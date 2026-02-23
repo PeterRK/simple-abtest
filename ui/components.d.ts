@@ -38,7 +38,6 @@ declare module 'vue' {
     FilterEditor: typeof import('./src/components/FilterEditor.vue')['default']
     FilterNode: typeof import('./src/components/FilterNode.vue')['default']
     GroupList: typeof import('./src/components/traffic/GroupList.vue')['default']
-    HelloWorld: typeof import('./src/components/HelloWorld.vue')['default']
     LayerList: typeof import('./src/components/traffic/LayerList.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
