@@ -144,7 +144,7 @@ func TestEvalExprMissingArg(t *testing.T) {
 
 func TestEvalExprLogicAndOrNot(t *testing.T) {
 	cfg := []byte(`[
-{"op":1,"dtype":0,"l":1,"r":2},
+{"op":1,"child":[1,2]},
 {"op":6,"dtype":1,"key":"k1","s":"A"},
 {"op":6,"dtype":1,"key":"k2","s":"B"}
 ]`)
@@ -160,7 +160,7 @@ func TestEvalExprLogicAndOrNot(t *testing.T) {
 	}
 
 	cfg = []byte(`[
-{"op":3,"dtype":0,"l":1},
+{"op":3,"child":[1]},
 {"op":6,"dtype":1,"key":"k","s":"X"}
 ]`)
 	nodes, err = ParseExpr(cfg)
@@ -176,8 +176,27 @@ func TestEvalExprLogicAndOrNot(t *testing.T) {
 }
 
 func TestParseExprBroken(t *testing.T) {
-	cfg := []byte(`[{"op":6,"dtype":1,"key":"k","s":"v","l":1}]`)
+	cfg := []byte(`[{"op":6,"dtype":1,"key":"k","s":"v","child":[1]}]`)
 	if _, err := ParseExpr(cfg); err == nil {
+		t.FailNow()
+	}
+}
+
+func TestEvalExprLogicMultiChild(t *testing.T) {
+	cfg := []byte(`[
+{"op":1,"child":[1,2,3]},
+{"op":6,"dtype":1,"key":"k1","s":"A"},
+{"op":6,"dtype":1,"key":"k2","s":"B"},
+{"op":6,"dtype":1,"key":"k3","s":"C"}
+]`)
+	nodes, err := ParseExpr(cfg)
+	if err != nil {
+		t.FailNow()
+	}
+	if !EvalExpr(nodes, map[string]string{"k1": "A", "k2": "B", "k3": "C"}) {
+		t.FailNow()
+	}
+	if EvalExpr(nodes, map[string]string{"k1": "A", "k2": "B", "k3": "X"}) {
 		t.FailNow()
 	}
 }

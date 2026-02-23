@@ -47,12 +47,10 @@ type ExprNode struct {
 	ParamI  int64    `json:"i,omitempty"`
 	ParamF  float64  `json:"f,omitempty"`
 	ParamSS []string `json:"ss,omitempty"`
-	Left    uint     `json:"l,omitempty"`
-	Right   uint     `json:"r,omitempty"`
+	Child   []int    `json:"child,omitempty"`
 
 	ss    map[string]bool
-	left  *ExprNode
-	right *ExprNode
+	child []*ExprNode
 }
 
 var (
@@ -76,36 +74,31 @@ func ParseExpr(config []byte) ([]ExprNode, error) {
 	used := make([]bool, len(nodes))
 	for i := 0; i < len(nodes); i++ {
 		node := &nodes[i]
-		if node.Left >= uint(len(nodes)) || node.Right >= uint(len(nodes)) ||
-			used[node.Left] || used[node.Right] {
-			return nil, errBrokenConfig
-		}
-		if node.Left > 0 {
-			node.left = &nodes[node.Left]
-			used[node.Left] = true
-		}
-		if node.Right > 0 {
-			node.right = &nodes[node.Right]
-			used[node.Right] = true
+		for _, j := range node.Child {
+			if j <= 0 || j >= len(nodes) || used[j] {
+				return nil, errBrokenConfig
+			}
+			used[j] = true
+			node.child = append(node.child, &nodes[j])
 		}
 
 		switch node.Op {
 		case OpAnd, OpOr:
-			if node.left == nil || node.right == nil || node.DType != DtNull {
+			if len(node.child) < 2 || node.DType != DtNull {
 				return nil, errBrokenConfig
 			}
 		case OpNot:
-			if node.left == nil || node.right != nil || node.DType != DtNull {
+			if len(node.child) != 1 || node.DType != DtNull {
 				return nil, errBrokenConfig
 			}
 		case OpIn, OpNotIn:
-			if node.left != nil || node.right != nil || len(node.Key) == 0 ||
+			if len(node.child) != 0 || len(node.Key) == 0 ||
 				node.DType != DtStr || len(node.ParamSS) == 0 {
 				return nil, errBrokenConfig
 			}
 			node.ss = utils.ListToSet(node.ParamSS)
 		case OpEqual, OpNotEqual, OpLessThan, OpLessOrEqual, OpGreatThan, OpGreatOrEqual:
-			if node.left != nil || node.right != nil || len(node.Key) == 0 ||
+			if len(node.child) != 0 || len(node.Key) == 0 ||
 				(node.DType != DtStr && node.DType != DtInt && node.DType != DtFloat) {
 				return nil, errBrokenConfig
 			}
@@ -181,29 +174,25 @@ func EvalExpr(expr []ExprNode, args map[string]string) bool {
 	eval = func(node *ExprNode) (bool, error) {
 		switch node.Op {
 		case OpAnd:
-			if pass, err := eval(node.left); err != nil {
-				return false, err
-			} else if !pass {
-				return false, nil
+			for _, child := range node.child {
+				if pass, err := eval(child); err != nil {
+					return false, err
+				} else if !pass {
+					return false, nil
+				}
 			}
-			if pass, err := eval(node.right); err != nil {
-				return false, err
-			} else {
-				return pass, nil
-			}
+			return true, nil
 		case OpOr:
-			if pass, err := eval(node.left); err != nil {
-				return false, err
-			} else if pass {
-				return true, nil
+			for _, child := range node.child {
+				if pass, err := eval(child); err != nil {
+					return false, err
+				} else if pass {
+					return true, nil
+				}
 			}
-			if pass, err := eval(node.right); err != nil {
-				return false, err
-			} else {
-				return pass, nil
-			}
+			return false, nil
 		case OpNot:
-			if pass, err := eval(node.left); err != nil {
+			if pass, err := eval(node.child[0]); err != nil {
 				return false, err
 			} else {
 				return !pass, nil
