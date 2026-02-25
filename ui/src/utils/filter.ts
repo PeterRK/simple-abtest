@@ -28,7 +28,7 @@ export const flatToTree = (nodes: ExprNode[]): TreeNode | null => {
     }
     const treeNode: TreeNode = {
       id: generateId(),
-      op: node.op,
+      op: node.op === 0 ? 6 : node.op,
       dtype: node.dtype,
       key: node.key,
       s: node.s,
@@ -53,13 +53,13 @@ export const treeToFlat = (root: TreeNode | null): ExprNode[] => {
   
   const visit = (node: TreeNode): number => {
     const currentIndex = nodes.length
-    // Placeholder
     nodes.push({} as ExprNode)
     
     const childIndices: number[] = []
     if (node.children) {
       for (const child of node.children) {
-        childIndices.push(visit(child))
+        const index = visit(child)
+        childIndices.push(index)
       }
     }
 
@@ -121,3 +121,55 @@ export const DTypeOptions = [
   { label: 'Int', value: 2 },
   { label: 'Float', value: 3 }
 ]
+
+export const validateExprNodes = (nodes: ExprNode[]): { valid: boolean; message?: string } => {
+  if (!nodes || nodes.length === 0) return { valid: true }
+
+  const used = new Array(nodes.length).fill(false)
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i]
+    if (!node) return { valid: false, message: '表达式结构非法' }
+    const children = node.child || []
+    for (const index of children) {
+      if (index <= 0 || index >= nodes.length || used[index]) {
+        return { valid: false, message: '表达式结构非法' }
+      }
+      used[index] = true
+    }
+
+    const dtype = node.dtype ?? 0
+    switch (node.op) {
+      case OpTypes.OpAnd:
+      case OpTypes.OpOr:
+        if (children.length < 2 || dtype !== DataTypes.DtNull) {
+          return { valid: false, message: '逻辑算子参数不合法' }
+        }
+        break
+      case OpTypes.OpNot:
+        if (children.length !== 1 || dtype !== DataTypes.DtNull) {
+          return { valid: false, message: '逻辑算子参数不合法' }
+        }
+        break
+      case OpTypes.OpIn:
+      case OpTypes.OpNotIn:
+        if (children.length !== 0 || !node.key || dtype !== DataTypes.DtStr || !node.ss || node.ss.length === 0) {
+          return { valid: false, message: 'IN算子参数不合法' }
+        }
+        break
+      case OpTypes.OpEqual:
+      case OpTypes.OpNotEqual:
+      case OpTypes.OpLessThan:
+      case OpTypes.OpLessOrEqual:
+      case OpTypes.OpGreatThan:
+      case OpTypes.OpGreatOrEqual:
+        if (children.length !== 0 || !node.key || (dtype !== DataTypes.DtStr && dtype !== DataTypes.DtInt && dtype !== DataTypes.DtFloat)) {
+          return { valid: false, message: '比较算子参数不合法' }
+        }
+        break
+      default:
+        return { valid: false, message: '表达式结构非法' }
+    }
+  }
+
+  return { valid: true }
+}

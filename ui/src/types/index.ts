@@ -47,14 +47,15 @@ export interface Group {
   is_default: boolean
   version: number
   cfg_id: number
+  cfg_stamp?: string
   description?: string
   force_hit?: string[]
-  config?: string // JSON string
+  config?: string
 }
 
 export interface Config {
   id: number
-  config: string
+  stamp?: string
 }
 
 export interface ExprNode {

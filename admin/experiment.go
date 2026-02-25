@@ -33,7 +33,7 @@ func prepareExpSql(db *sql.DB) (err error) {
 		return err
 	}
 	expSql.getList, err = db.Prepare(
-		"SELECT `exp_id`,`name`,`description`,`status` FROM `experiment` " +
+		"SELECT `exp_id`,`name`,`description`,`status`,`version` FROM `experiment` " +
 			"WHERE `app_id`=?")
 	if err != nil {
 		return err
@@ -80,16 +80,16 @@ func prepareExpSql(db *sql.DB) (err error) {
 }
 
 type expSummary struct {
-	Id     uint32 `json:"id"`
-	Status uint8  `json:"status"`
-	Name   string `json:"name"`
-	Desc   string `json:"description,omitempty"`
+	Id      uint32 `json:"id"`
+	Status  uint8  `json:"status"`
+	Name    string `json:"name"`
+	Desc    string `json:"description,omitempty"`
+	Version uint32 `json:"version"`
 }
 
 type expDetail struct {
 	expSummary
-	Version uint32          `json:"version"`
-	Filter  []core.ExprNode `json:"filter,omitempty"`
+	Filter []core.ExprNode `json:"filter,omitempty"`
 }
 
 func bindExpOp(router *httprouter.Router, registry *prometheus.Registry) {
@@ -261,32 +261,6 @@ func expUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusConflict)
 		return
 	}
-
-	resp := &expDetail{}
-	resp.Id = uint32(id)
-
-	err = expSql.getOne.QueryRow(id).Scan(
-		&resp.Name, &resp.Desc, &resp.Status, &filter, &resp.Version)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			w.WriteHeader(http.StatusNotFound)
-		} else {
-			utils.GetLogger().Errorf("fail to run sql[exp.getOne]: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-		}
-		return
-	}
-
-	if len(filter) != 0 {
-		err = json.Unmarshal(filter, &resp.Filter)
-		if err != nil {
-			utils.GetLogger().Errorf("broken filter json in experiment %d", id)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-	}
-
-	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
 }
 
 func expDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {

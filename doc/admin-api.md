@@ -67,6 +67,7 @@ Get application details and its experiments.
     {
       "id": 2001,
       "status": 1,
+      "version": 3,
       "name": "exp-A",
       "description": "optional"
     }
@@ -88,7 +89,7 @@ Update an application.
 }
 ```
 
-**Response (200 OK)**: Updated application object.
+**Response (200 OK)**: Empty body.
 
 ### DELETE `/api/app/:id`
 
@@ -175,7 +176,7 @@ Update experiment metadata and filter.
 }
 ```
 
-**Response (200 OK)**: Updated experiment object.
+**Response (200 OK)**: Empty body.
 
 ### DELETE `/api/exp/:id`
 
@@ -271,7 +272,7 @@ Update layer metadata.
 }
 ```
 
-**Response (200 OK)**: Updated layer object.
+**Response (200 OK)**: Empty body.
 
 ### DELETE `/api/lyr/:id`
 
@@ -439,6 +440,7 @@ Get group details.
   "is_default": false,
   "version": 1,
   "cfg_id": 7001,
+  "cfg_stamp": "2026-02-26 12:00:00",
   "force_hit": [
     "u1",
     "u2"
@@ -465,7 +467,7 @@ Update metadata, force-hit keys, and config ID.
 }
 ```
 
-**Response (200 OK)**: Updated group object.
+**Response (200 OK)**: Empty body.
 
 ### DELETE `/api/grp/:id`
 
@@ -487,7 +489,7 @@ Delete a non-default group (must have `share == 0`).
 
 List historical configs.
 
-**Query**: `begin` (timestamp, optional).
+**Query**: `begin` (Unix timestamp in seconds).
 
 **Response (200 OK)**
 
@@ -495,7 +497,7 @@ List historical configs.
 [
   {
     "id": 7001,
-    "config": "{...}"
+    "stamp": "2026-02-26 12:00:00"
   },
   ...
 ]
@@ -513,3 +515,9 @@ Create a new config. Body is raw config content.
   "id": 7003 
 }
 ```
+
+### GET `/api/cfg/:id`
+
+Get config content by config ID.
+
+**Response (200 OK)**: Raw content body (e.g., JSON).

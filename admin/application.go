@@ -145,7 +145,7 @@ func appGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	for rows.Next() {
 		var exp expSummary
-		err = rows.Scan(&exp.Id, &exp.Name, &exp.Desc, &exp.Status)
+		err = rows.Scan(&exp.Id, &exp.Name, &exp.Desc, &exp.Status, &exp.Version)
 		if err != nil {
 			utils.GetLogger().Errorf("fail to run sql[exp.getList]: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -205,10 +205,6 @@ func appUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusConflict)
 		return
 	}
-
-	resp := req
-	resp.Version++
-	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
 }
 
 func appDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {

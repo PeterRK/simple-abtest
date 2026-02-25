@@ -28,6 +28,7 @@ var grpSql struct {
 
 var cfgSql struct {
 	getList *sql.Stmt
+	getOne  *sql.Stmt
 	create  *sql.Stmt
 }
 
@@ -43,12 +44,13 @@ type grpDetail struct {
 	Version  uint32   `json:"version"`
 	CfgId    uint32   `json:"cfg_id,omitempty"`
 	ForceHit []string `json:"force_hit,omitempty"`
+	CfgStamp string   `json:"cfg_stamp,omitempty"`
 	Config   string   `json:"config,omitempty"`
 }
 
 type cfgSummary struct {
-	Id      uint32 `json:"id"`
-	Content string `json:"config"`
+	Id    uint32 `json:"id"`
+	Stamp string `json:"stamp"`
 }
 
 func prepareGrpSql(db *sql.DB) (err error) {
@@ -59,11 +61,12 @@ func prepareGrpSql(db *sql.DB) (err error) {
 		return err
 	}
 	grpSql.getOne, err = db.Prepare("SELECT t1.*," +
-		"COALESCE(`content`,'') AS `content` FROM " +
-		"(SELECT `name`,`share`,`is_default`,`force_hit`," +
+		"`create_time`,COALESCE(`content`,'') AS `content` FROM " +
+		"( SELECT `name`,`share`,`is_default`,`force_hit`," +
 		"`version`,`cfg_id` FROM `exp_group` WHERE `grp_id`=? ) t1 " +
 		"LEFT JOIN " +
-		"( SELECT `cfg_id`,`content` FROM `exp_config` ) t2 " +
+		"( SELECT `cfg_id`,`create_time`,`content` " +
+		"FROM `exp_config` ) t2 " +
 		"ON t1.cfg_id = t2.cfg_id")
 	if err != nil {
 		return err
@@ -106,8 +109,13 @@ func prepareGrpSql(db *sql.DB) (err error) {
 	}
 
 	cfgSql.getList, err = db.Prepare(
-		"SELECT `cfg_id`,`content` FROM `exp_config` " +
+		"SELECT `cfg_id`,`create_time` FROM `exp_config` " +
 			"WHERE `grp_id`=? AND create_time>=?")
+	if err != nil {
+		return err
+	}
+	cfgSql.getOne, err = db.Prepare(
+		"SELECT `content` FROM `exp_config` WHERE `cfg_id`=?")
 	if err != nil {
 		return err
 	}
@@ -127,6 +135,7 @@ func bindGrpOp(router *httprouter.Router, registry *prometheus.Registry) {
 
 	router.Handle(http.MethodGet, "/api/grp/:id/cfg", cfgGetList)
 	router.Handle(http.MethodPost, "/api/grp/:id/cfg", cfgCreate)
+	router.Handle(http.MethodGet, "/api/cfg/:id", cfgGetOne)
 }
 
 func grpGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
@@ -139,10 +148,11 @@ func grpGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	resp := &grpDetail{}
 	resp.Id = uint32(id)
 
+	var stamp sql.NullTime
 	var forceHit string
 	err = grpSql.getOne.QueryRow(id).Scan(&resp.Name,
 		&resp.Share, &resp.IsDefault, &forceHit,
-		&resp.Version, &resp.CfgId, &resp.Config)
+		&resp.Version, &resp.CfgId, &stamp, &resp.Config)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			w.WriteHeader(http.StatusNotFound)
@@ -151,6 +161,9 @@ func grpGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 		return
+	}
+	if stamp.Valid {
+		resp.CfgStamp = stamp.Time.Format(time.DateTime)
 	}
 	if len(forceHit) != 0 {
 		resp.ForceHit = strings.Split(forceHit, ",")
@@ -252,28 +265,6 @@ func grpUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusConflict)
 		return
 	}
-
-	resp := &grpDetail{}
-	resp.Id = uint32(id)
-
-	var forceHit string
-	err = grpSql.getOne.QueryRow(id).Scan(&resp.Name,
-		&resp.Share, &resp.IsDefault, &forceHit,
-		&resp.Version, &resp.CfgId, &resp.Config)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			w.WriteHeader(http.StatusNotFound)
-		} else {
-			utils.GetLogger().Errorf("fail to run sql[grp.getOne]: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-		}
-		return
-	}
-	if len(forceHit) != 0 {
-		resp.ForceHit = strings.Split(forceHit, ",")
-	}
-
-	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
 }
 
 func grpDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
@@ -352,16 +343,42 @@ func cfgGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	var resp []cfgSummary
 	for rows.Next() {
-		var rec cfgSummary
-		err := rows.Scan(&rec.Id, &rec.Content)
+		var id uint32
+		var stamp time.Time
+		err := rows.Scan(&id, &stamp)
 		if err != nil {
 			utils.GetLogger().Errorf("fail to run sql[cfg.getList]: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		resp = append(resp, rec)
+		resp = append(resp, cfgSummary{
+			Id:    id,
+			Stamp: stamp.Format(time.DateTime),
+		})
 	}
 	utils.HttpReplyJsonWithLog(w, http.StatusOK, &resp)
+}
+
+func cfgGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	var content string
+	err = cfgSql.getOne.QueryRow(id).Scan(&content)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			w.WriteHeader(http.StatusNotFound)
+		} else {
+			utils.GetLogger().Errorf("fail to run sql[cfg.getOne]: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.Write(utils.UnsafeStringToBytes(content))
 }
 
 func cfgCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {

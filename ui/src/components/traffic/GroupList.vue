@@ -1,98 +1,88 @@
 <template>
   <div class="group-list">
-    <el-table :data="groups" size="small">
-        <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="name" label="Name" />
-        <el-table-column prop="share" label="Share (0-1000)" width="120" />
-        <el-table-column label="Default" width="80">
-            <template #default="{ row }">
-                <el-tag v-if="row.is_default" type="success" size="small">Default</el-tag>
-            </template>
-        </el-table-column>
-        <el-table-column label="Config">
-             <template #default="{ row }">
-                 <el-button type="text" @click="openConfig(row)">Config</el-button>
-             </template>
-        </el-table-column>
-        <el-table-column label="Actions" width="150">
-            <template #default="{ row }">
-                <el-button type="text" @click="openGroupDialog('edit', row)">Edit</el-button>
-                <el-button type="text" @click="openRebalance(row)" v-if="!row.is_default">Rebalance</el-button>
-                <el-button type="text" class="danger" v-if="!row.is_default && row.share === 0" @click="handleDelete(row)">Delete</el-button>
-            </template>
-        </el-table-column>
-    </el-table>
-    <div class="footer">
-        <el-button size="small" @click="openGroupDialog('create')">Add Group</el-button>
+    <div class="group-row">
+      <div
+        v-for="grp in groups"
+        :key="grp.id"
+        class="group-card"
+        :class="{ active: selectedGroupId === grp.id }"
+        @click="selectGroup(grp)"
+      >
+        <div class="group-title">{{ grp.name }} ({{ grp.share }}‰)</div>
+        <div class="group-actions">
+          <el-button size="small" @click.stop="openRebalance(grp)" v-if="!grp.is_default">扩缩容</el-button>
+          <el-button size="small" type="danger" v-if="!grp.is_default && grp.share === 0" @click.stop="handleDelete(grp)">删除</el-button>
+        </div>
+      </div>
     </div>
 
-    <!-- Group Dialog -->
-    <el-dialog v-model="dialogVisible" :title="dialogType === 'create' ? 'Add Group' : 'Edit Group'">
-        <el-form :model="form" label-width="100px">
-            <el-form-item label="Name">
-                <el-input v-model="form.name" />
-            </el-form-item>
-            <el-form-item label="Description">
-                <el-input v-model="form.description" />
-            </el-form-item>
-            <el-form-item label="Force Hit (Keys)">
-                <el-select v-model="form.force_hit" multiple filterable allow-create default-first-option placeholder="Enter keys">
-                </el-select>
-            </el-form-item>
-            <el-form-item label="Config ID" v-if="dialogType === 'edit'">
-                <el-input v-model="form.cfg_id" disabled />
-            </el-form-item>
-        </el-form>
-        <template #footer>
-            <el-button @click="dialogVisible = false">Cancel</el-button>
-            <el-button type="primary" @click="handleSave">Save</el-button>
-        </template>
+    <div class="group-footer">
+      <el-button size="small" type="primary" @click="openGroupDialog('create')">新增Group</el-button>
+      <el-button size="small" @click="handleShuffle">流量打散</el-button>
+    </div>
+
+    <div v-if="selectedGroupDetail" class="group-detail">
+      <div class="group-detail-header">
+        <el-input v-model="groupForm.name" placeholder="组名" />
+        <el-button type="primary" @click="handleUpdate">更新</el-button>
+        <div class="group-detail-actions">
+          <el-button @click="handleSearchConfigs">配置查找</el-button>
+          <div class="config-days-input">
+            <el-input-number v-model="configDays" :min="0" :max="3650" size="small" />
+            <span>天前</span>
+          </div>
+        </div>
+      </div>
+      <div class="group-config-area">
+        <el-input v-model="forceHitText" type="textarea" :rows="8" placeholder="强制命中 key，每行一个" />
+        <el-input v-model="newConfigContent" type="textarea" :rows="8" placeholder="配置内容" />
+        <div class="config-history">
+          <el-table
+            :data="displayConfigs"
+            size="small"
+            border
+            highlight-current-row
+            row-key="id"
+            :current-row-key="selectedConfigId"
+            :row-class-name="configRowClassName"
+            @current-change="handleSelectConfig"
+          >
+            <el-table-column prop="id" label="配置ID" width="120" />
+            <el-table-column prop="stamp" label="更新时间" />
+          </el-table>
+        </div>
+      </div>
+    </div>
+
+    <el-dialog v-model="dialogVisible" title="新增Group" width="360px">
+      <el-form :model="form" label-width="40px">
+        <el-form-item label="名称">
+          <el-input v-model="form.name" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleCreate">确定</el-button>
+      </template>
     </el-dialog>
 
-    <!-- Rebalance Dialog (Group Share) -->
-    <el-dialog v-model="rebalanceVisible" title="Adjust Group Share" width="400px">
-        <el-form>
-            <el-form-item label="New Share">
-                <el-input-number v-model="rebalanceShare" :min="0" :max="1000" />
-            </el-form-item>
-            <p>Remaining share will be assigned to Default group.</p>
-        </el-form>
-        <template #footer>
-            <el-button @click="rebalanceVisible = false">Cancel</el-button>
-            <el-button type="primary" @click="handleRebalance">Confirm</el-button>
-        </template>
-    </el-dialog>
-
-    <!-- Config Dialog -->
-    <el-dialog v-model="configVisible" title="Group Configuration" width="60%">
-        <div class="config-actions">
-            <el-button type="primary" @click="showCreateConfig = true">New Config</el-button>
-        </div>
-        
-        <div v-if="showCreateConfig" class="create-config">
-            <el-input v-model="newConfigContent" type="textarea" :rows="10" placeholder="JSON config content" />
-            <div class="mt-2">
-                <el-button @click="showCreateConfig = false">Cancel</el-button>
-                <el-button type="primary" @click="handleCreateConfig">Save & Apply</el-button>
-            </div>
-        </div>
-        
-        <el-table :data="configHistory" height="300px" style="margin-top: 10px">
-            <el-table-column prop="id" label="ID" width="80" />
-            <el-table-column prop="config" label="Config" show-overflow-tooltip />
-            <el-table-column label="Action" width="100">
-                <template #default="{ row }">
-                     <el-button type="text" @click="applyConfig(row)">Apply</el-button>
-                </template>
-            </el-table-column>
-        </el-table>
+    <el-dialog v-model="rebalanceVisible" title="扩缩容" width="400px">
+      <el-form>
+        <el-form-item label="流量千分比">
+          <el-input-number v-model="rebalanceShare" :min="0" :max="1000" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="rebalanceVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleRebalance">确定</el-button>
+      </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { createGrp, updateGrp, deleteGrp, rebalanceSeg, getGrpCfg, createGrpCfg } from '@/api'
+import { ref, computed, watch } from 'vue'
+import { createGrp, updateGrp, deleteGrp, rebalanceSeg, getGrpCfg, createGrpCfg, shuffleSeg, getGroup, getConfig } from '@/api'
 import type { Segment, Group, Config } from '@/api/types'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -103,55 +93,133 @@ const props = defineProps<{
 const emit = defineEmits(['refresh'])
 
 const groups = computed(() => props.segment.group || [])
+const selectedGroupId = ref<number | null>(null)
+const selectedGroupDetail = ref<Group | null>(null)
+const groupForm = ref({ name: '' })
+const forceHitText = ref('')
+const newConfigContent = ref('')
+const currentConfigContent = ref('')
+const configHistory = ref<Config[]>([])
+const selectedConfigId = ref<number | null>(null)
+const configDays = ref(7)
 
-// Group Dialog
-const dialogVisible = ref(false)
-const dialogType = ref<'create' | 'edit'>('create')
-const form = ref({ name: '', description: '', force_hit: [] as string[], cfg_id: 0 })
-const currentGroup = ref<Group | null>(null)
-
-const openGroupDialog = (type: 'create' | 'edit', row?: Group) => {
-    dialogType.value = type
-    if (type === 'edit' && row) {
-        currentGroup.value = row
-        form.value = {
-            name: row.name,
-            description: row.description || '',
-            force_hit: row.force_hit || [],
-            cfg_id: row.cfg_id
-        }
-    } else {
-        currentGroup.value = null
-        form.value = { name: '', description: '', force_hit: [], cfg_id: 0 }
-    }
-    dialogVisible.value = true
+const resetGroupState = () => {
+  selectedGroupDetail.value = null
+  groupForm.value = { name: '' }
+  forceHitText.value = ''
+  newConfigContent.value = ''
+  currentConfigContent.value = ''
+  configHistory.value = []
+  selectedConfigId.value = null
 }
 
-const handleSave = async () => {
-    try {
-        if (dialogType.value === 'create') {
-            await createGrp({
-                seg_id: props.segment.id,
-                seg_ver: props.segment.version!,
-                name: form.value.name,
-                description: form.value.description
-            })
-            ElMessage.success('Group created')
-        } else if (currentGroup.value) {
-            await updateGrp(currentGroup.value.id, {
-                name: form.value.name,
-                description: form.value.description,
-                version: currentGroup.value.version,
-                cfg_id: form.value.cfg_id,
-                force_hit: form.value.force_hit
-            })
-            ElMessage.success('Group updated')
-        }
-        dialogVisible.value = false
-        emit('refresh')
-    } catch (e) {
-        // ignore
+const loadGroupDetail = async (grpId: number) => {
+  try {
+    const res = await getGroup(grpId)
+    selectedGroupDetail.value = res.data
+    groupForm.value = { name: res.data.name }
+    forceHitText.value = (res.data.force_hit || []).join('\n')
+    newConfigContent.value = res.data.config || ''
+    currentConfigContent.value = res.data.config || ''
+    selectedConfigId.value = res.data.cfg_id ?? null
+    configHistory.value = res.data.cfg_id ? [{ id: res.data.cfg_id, stamp: res.data.cfg_stamp }] : []
+  } catch (e) {
+    selectedGroupDetail.value = null
+  }
+}
+
+watch(
+  () => props.segment.id,
+  () => {
+    selectedGroupId.value = null
+    resetGroupState()
+  }
+)
+
+const selectGroup = (grp: Group) => {
+  selectedGroupId.value = grp.id
+}
+
+watch(
+  () => selectedGroupId.value,
+  (val) => {
+    if (!val) {
+      resetGroupState()
+      return
     }
+    configHistory.value = []
+    newConfigContent.value = ''
+    loadGroupDetail(val)
+  }
+)
+
+const dialogVisible = ref(false)
+const form = ref({ name: '' })
+
+const openGroupDialog = (type: 'create') => {
+  if (type === 'create') {
+    form.value = { name: '' }
+    dialogVisible.value = true
+  }
+}
+
+const handleCreate = async () => {
+  try {
+    await createGrp({
+      seg_id: props.segment.id,
+      seg_ver: props.segment.version!,
+      name: form.value.name
+    })
+    ElMessage.success('Group created')
+    dialogVisible.value = false
+    emit('refresh')
+  } catch (e) {
+    // ignore
+  }
+}
+
+const handleUpdate = async () => {
+  if (!selectedGroupDetail.value) return
+  try {
+    const forceHit = forceHitText.value
+      .split('\n')
+      .map(item => item.trim())
+      .filter(item => item.length > 0)
+    const currentConfigId = selectedGroupDetail.value.cfg_id
+    const activeConfigId = selectedConfigId.value ?? currentConfigId
+    if (activeConfigId == null) return
+    if (activeConfigId !== currentConfigId) {
+      await updateGrp(selectedGroupDetail.value.id, {
+        name: groupForm.value.name,
+        version: selectedGroupDetail.value.version,
+        cfg_id: activeConfigId,
+        force_hit: forceHit
+      })
+    } else {
+      const hasContentChange = newConfigContent.value !== currentConfigContent.value
+      if (hasContentChange) {
+        const res = await createGrpCfg(selectedGroupDetail.value.id, newConfigContent.value)
+        await updateGrp(selectedGroupDetail.value.id, {
+          name: groupForm.value.name,
+          version: selectedGroupDetail.value.version,
+          cfg_id: res.data.id,
+          force_hit: forceHit
+        })
+      } else {
+        await updateGrp(selectedGroupDetail.value.id, {
+          name: groupForm.value.name,
+          version: selectedGroupDetail.value.version,
+          cfg_id: currentConfigId ?? 0,
+          force_hit: forceHit
+        })
+      }
+    }
+    ElMessage.success('Group updated')
+    emit('refresh')
+    await loadGroupDetail(selectedGroupDetail.value.id)
+  } catch (e) {
+    // ignore
+  }
 }
 
 const handleDelete = async (grp: Group) => {
@@ -167,6 +235,15 @@ const handleDelete = async (grp: Group) => {
     } catch (e) {
         // ignore
     }
+}
+
+const handleShuffle = async () => {
+  try {
+    await shuffleSeg(props.segment.id)
+    ElMessage.success('Segment seed shuffled')
+  } catch (e) {
+    // ignore
+  }
 }
 
 // Rebalance
@@ -196,87 +273,149 @@ const handleRebalance = async () => {
     }
 }
 
-// Config
-const configVisible = ref(false)
-const activeGroup = ref<Group | null>(null)
-const configHistory = ref<Config[]>([])
-const showCreateConfig = ref(false)
-const newConfigContent = ref('')
+const displayConfigs = computed(() => {
+  if (!selectedGroupDetail.value) return []
+  const list = configHistory.value || []
+  const currentId = selectedGroupDetail.value.cfg_id
+  if (!currentId) return list
+  const stamp = selectedGroupDetail.value.cfg_stamp
+  const merged = list.map(item => (item.id === currentId ? { ...item, stamp: item.stamp ?? stamp } : item))
+  if (merged.some(item => item.id === currentId)) return merged
+  return [{ id: currentId, stamp }, ...merged]
+})
 
-const openConfig = async (grp: Group) => {
-    activeGroup.value = grp
-    configVisible.value = true
-    showCreateConfig.value = false
-    await loadConfigs(grp.id)
+const toBeginTimestamp = () => {
+  const days = Number(configDays.value) || 0
+  if (days <= 0) return undefined
+  return Math.floor(Date.now() / 1000) - days * 86400
 }
 
-const loadConfigs = async (grpId: number) => {
-    try {
-        const res = await getGrpCfg(grpId)
-        configHistory.value = res.data || []
-    } catch (e) {
-        // ignore
-    }
+const loadConfigs = async (grpId: number, begin?: number) => {
+  try {
+    const res = await getGrpCfg(grpId, begin)
+    configHistory.value = res.data || []
+  } catch (e) {
+    // ignore
+  }
 }
 
-const handleCreateConfig = async () => {
-    if (!activeGroup.value) return
-    try {
-        const res = await createGrpCfg(activeGroup.value.id, newConfigContent.value)
-        // Bind to group immediately? 
-        // Create config just creates it. We need to update group to point to it.
-        // Wait, API doc says: "Create a new config record for a group."
-        // And Group has cfg_id.
-        // Usually we want to apply it.
-        // Let's apply it by updating group.
-        const newCfgId = res.data.id
-        await updateGrp(activeGroup.value.id, {
-             name: activeGroup.value.name,
-             description: activeGroup.value.description,
-             version: activeGroup.value.version,
-             cfg_id: newCfgId,
-             force_hit: activeGroup.value.force_hit || []
-        })
-        ElMessage.success('Config created and applied')
-        showCreateConfig.value = false
-        newConfigContent.value = ''
-        emit('refresh') // Refresh parent to see new cfg_id
-        configVisible.value = false
-    } catch (e) {
-        ElMessage.error('Failed to create config')
-    }
+const handleSearchConfigs = async () => {
+  if (!selectedGroupDetail.value) return
+  const begin = toBeginTimestamp()
+  await loadConfigs(selectedGroupDetail.value.id, begin)
 }
 
-const applyConfig = async (cfg: Config) => {
-    if (!activeGroup.value) return
-    try {
-        await updateGrp(activeGroup.value.id, {
-             name: activeGroup.value.name,
-             description: activeGroup.value.description,
-             version: activeGroup.value.version,
-             cfg_id: cfg.id,
-             force_hit: activeGroup.value.force_hit || []
-        })
-        ElMessage.success('Config applied')
-        emit('refresh')
-        configVisible.value = false
-    } catch (e) {
-         ElMessage.error('Failed to apply config')
-    }
+const normalizeConfigContent = (content: unknown) => {
+  if (typeof content === 'string') return content
+  try {
+    return JSON.stringify(content, null, 2)
+  } catch (e) {
+    return String(content)
+  }
+}
+
+const handleSelectConfig = async (cfg: Config | null) => {
+  if (!cfg) return
+  selectedConfigId.value = cfg.id
+  try {
+    const res = await getConfig(cfg.id)
+    newConfigContent.value = normalizeConfigContent(res.data)
+  } catch (e) {
+    // ignore
+  }
+}
+
+const configRowClassName = ({ row }: { row: Config }) => {
+  if (row.id === selectedGroupDetail.value?.cfg_id) return 'config-row-current'
+  return ''
 }
 </script>
 
 <style scoped>
-.footer {
-    margin-top: 10px;
+.group-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
-.danger {
-    color: #f56c6c;
+.group-card {
+  flex: 1 1 200px;
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
+  padding: 10px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
-.config-actions {
-    margin-bottom: 10px;
+.group-card.active {
+  border-color: #409eff;
+  box-shadow: 0 0 0 1px #409eff inset;
 }
-.mt-2 {
-    margin-top: 10px;
+.group-title {
+  font-weight: 600;
+}
+.group-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
+.group-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+.group-detail {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.group-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.group-detail-header :deep(.el-input) {
+  width: 220px;
+}
+.group-detail-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 10px;
+}
+.config-days-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.group-config-area {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.group-config-area :deep(.el-textarea__inner) {
+  min-height: 220px;
+}
+.config-history {
+  min-width: 260px;
+  flex: 0 0 320px;
+}
+.config-history :deep(.el-table) {
+  width: 100%;
+}
+.config-row-current td {
+  background-color: #f0f9eb;
+}
+.config-history {
+  display: flex;
+  justify-content: flex-end;
+}
+.config-history-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 </style>

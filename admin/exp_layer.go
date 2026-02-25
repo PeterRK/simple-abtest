@@ -216,10 +216,6 @@ func lyrUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusConflict)
 		return
 	}
-
-	resp := req
-	resp.Version++
-	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
 }
 
 func lyrDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {

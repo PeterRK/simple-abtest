@@ -50,7 +50,9 @@ func Main() int {
 		return 1
 	}
 	db, err = sql.Open("mysql", utils.OverwriteMysqlParams(
-		config.Database, map[string]string{"clientFoundRows": "true"}))
+		config.Database, map[string]string{
+			"clientFoundRows": "true",
+			"parseTime":       "true"}))
 	if err != nil {
 		fmt.Printf("fail to connect mysql: %v\n", err)
 		return -1

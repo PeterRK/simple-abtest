@@ -25,9 +25,9 @@ export const shuffleExp = (id: number) => adminApi.post(`/exp/${id}/shuffle`)
 export const switchExp = (id: number, data: { status: number; version: number }) => adminApi.put(`/exp/${id}/status`, data)
 
 // Layer
-export const createLayer = (data: { exp_id: number; exp_ver: number; name: string; description?: string }) => adminApi.post<Layer>('/lyr', data)
+export const createLayer = (data: { exp_id: number; exp_ver: number; name: string }) => adminApi.post<Layer>('/lyr', data)
 export const getLayer = (id: number) => adminApi.get<Layer>(`/lyr/${id}`)
-export const updateLayer = (id: number, data: { name: string; description?: string; version: number }) => adminApi.put<Layer>(`/lyr/${id}`, data)
+export const updateLayer = (id: number, data: { name: string; version: number }) => adminApi.put<Layer>(`/lyr/${id}`, data)
 export const deleteLayer = (id: number, data: { exp_id: number; exp_ver: number; version: number }) => adminApi.delete(`/lyr/${id}`, { data })
 export const rebalanceLayer = (id: number, data: { version: number; segment: { id: number; begin: number; end: number }[] }) => adminApi.post(`/lyr/${id}/rebalance`, data)
 
@@ -39,14 +39,15 @@ export const shuffleSegment = (id: number) => adminApi.post(`/seg/${id}/shuffle`
 export const rebalanceSegment = (id: number, data: { version: number; grp_id: number; share: number }) => adminApi.post(`/seg/${id}/rebalance`, data)
 
 // Group
-export const createGroup = (data: { seg_id: number; seg_ver: number; name: string; description?: string }) => adminApi.post<Group>('/grp', data)
+export const createGroup = (data: { seg_id: number; seg_ver: number; name: string }) => adminApi.post<Group>('/grp', data)
 export const getGroup = (id: number) => adminApi.get<Group>(`/grp/${id}`)
-export const updateGroup = (id: number, data: { name: string; description?: string; version: number; cfg_id: number; force_hit?: string[] }) => adminApi.put<Group>(`/grp/${id}`, data)
+export const updateGroup = (id: number, data: { name: string; version: number; cfg_id: number; force_hit?: string[] }) => adminApi.put<Group>(`/grp/${id}`, data)
 export const deleteGroup = (id: number, data: { seg_id: number; seg_ver: number; version: number }) => adminApi.delete(`/grp/${id}`, { data })
 
 // Config
 export const getConfigs = (grpId: number, begin?: number) => adminApi.get<Config[]>(`/grp/${grpId}/cfg`, { params: { begin } })
-export const createConfig = (grpId: number, content: string) => adminApi.post<{ id: number }>(`/grp/${grpId}/cfg`, content, { headers: { 'Content-Type': 'application/json' } })
+export const createConfig = (grpId: number, content: string) => adminApi.post<{ id: number }>(`/grp/${grpId}/cfg`, content)
+export const getConfig = (id: number) => adminApi.get<string>(`/cfg/${id}`, { responseType: 'text' })
 
 // Engine
 export const verify = (data: { appid: number; key: string; context?: Record<string, string> }) => engineApi.post<{ config: Record<string, string>; tags: string[] }>('/', data)

@@ -4,7 +4,7 @@
       <div class="logo">AB Testing Platform</div>
       <el-menu mode="horizontal" router :default-active="$route.path" :ellipsis="false">
         <el-menu-item index="/">Experiments</el-menu-item>
-        <el-menu-item index="/verify">Online Verify</el-menu-item>
+        <el-menu-item index="/verify">Verify</el-menu-item>
       </el-menu>
     </el-header>
     <el-main>
