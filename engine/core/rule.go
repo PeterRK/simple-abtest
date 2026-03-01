@@ -55,7 +55,7 @@ type ExprNode struct {
 
 var (
 	errBrokenConfig = errors.New("broken config")
-	errArgmentMiss  = errors.New("argment miss")
+	errArgumentMiss = errors.New("argument miss")
 )
 
 // ParseExpr parses a JSON encoded expression configuration into a slice
@@ -149,7 +149,7 @@ func EvalExpr(expr []ExprNode, args map[string]string) bool {
 		fi func(a, b int64) bool, ff func(a, b float64) bool) (bool, error) {
 		str, got := args[node.Key]
 		if !got {
-			return false, errArgmentMiss
+			return false, errArgumentMiss
 		}
 		switch node.DType {
 		case DtStr:
@@ -200,13 +200,13 @@ func EvalExpr(expr []ExprNode, args map[string]string) bool {
 		case OpIn:
 			val, got := args[node.Key]
 			if !got {
-				return false, errArgmentMiss
+				return false, errArgumentMiss
 			}
 			return node.ss[val], nil
 		case OpNotIn:
 			val, got := args[node.Key]
 			if !got {
-				return false, errArgmentMiss
+				return false, errArgumentMiss
 			}
 			return !node.ss[val], nil
 

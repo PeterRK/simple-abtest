@@ -36,7 +36,7 @@ func HttpReplyJson(w http.ResponseWriter, code int, obj any) error {
 	return json.NewEncoder(w).Encode(obj)
 }
 
-// HttpGetJsonArgsWithLogger decodes a JSON body into obj and logs through LogCtx.
+// HttpGetJsonArgsWithLog decodes a JSON body into obj and logs the raw payload.
 func HttpGetJsonArgsWithLog(logger *ContextLogger, r *http.Request, obj any) error {
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -46,7 +46,7 @@ func HttpGetJsonArgsWithLog(logger *ContextLogger, r *http.Request, obj any) err
 	return json.Unmarshal(raw, obj)
 }
 
-// HttpReplyJsonWithLogger writes obj as JSON and logs through LogCtx.
+// HttpReplyJsonWithLog writes obj as JSON and logs the raw payload.
 func HttpReplyJsonWithLog(logger *ContextLogger, w http.ResponseWriter, code int, obj any) error {
 	if obj == nil {
 		w.WriteHeader(code)
@@ -243,6 +243,7 @@ func CustomizeDefaultHttpClient(maxIdleConns, maxIdleConnsPerHost, maxConnsPerHo
 	}
 }
 
+// RestfulDo sends an HTTP request and decodes the response into out.
 func RestfulDo(ctx context.Context, method, url string,
 	headers, params map[string]string, obj, out any) (code int, err error) {
 	req, err := NewRestfulRequest(ctx, method, url, headers, params, obj)
@@ -256,6 +257,7 @@ func RestfulDo(ctx context.Context, method, url string,
 	return HandleRestfulResponse(resp, out)
 }
 
+// RestfulGet sends an HTTP GET request and decodes the response into out.
 func RestfulGet(ctx context.Context, url string,
 	headers, params map[string]string, out any) (code int, err error) {
 	return RestfulDo(ctx, http.MethodGet, url, headers, params, nil, out)

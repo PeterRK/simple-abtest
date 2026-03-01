@@ -46,7 +46,7 @@ func Main() int {
 	}
 
 	if len(config.Database) == 0 {
-		fmt.Println("database is not unspecified")
+		fmt.Println("database is unspecified")
 		return 1
 	}
 	db, err = sql.Open("mysql", utils.OverwriteMysqlParams(

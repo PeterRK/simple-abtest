@@ -108,11 +108,13 @@ func SetLogLevel(lv LogLevel) {
 
 var logTraceNum uint64
 
+// ContextLogger logs with a unique trace id and optional context label.
 type ContextLogger struct {
 	id  uint64
 	ctx string
 }
 
+// NewContextLogger returns a ContextLogger with the provided context label.
 func NewContextLogger(ctx string) *ContextLogger {
 	return &ContextLogger{
 		id:  atomic.AddUint64(&logTraceNum, 1),
@@ -120,6 +122,7 @@ func NewContextLogger(ctx string) *ContextLogger {
 	}
 }
 
+// Debug logs a debug message with the context trace fields.
 func (l *ContextLogger) Debug(msg string) {
 	if len(l.ctx) == 0 {
 		logger.sugar.Debugw(msg, "id", l.id)
@@ -128,6 +131,7 @@ func (l *ContextLogger) Debug(msg string) {
 	}
 }
 
+// Info logs an info message with the context trace fields.
 func (l *ContextLogger) Info(msg string) {
 	if len(l.ctx) == 0 {
 		logger.sugar.Infow(msg, "id", l.id)
@@ -136,6 +140,7 @@ func (l *ContextLogger) Info(msg string) {
 	}
 }
 
+// Warn logs a warning message with the context trace fields.
 func (l *ContextLogger) Warn(msg string) {
 	if len(l.ctx) == 0 {
 		logger.sugar.Warnw(msg, "id", l.id)
@@ -144,6 +149,7 @@ func (l *ContextLogger) Warn(msg string) {
 	}
 }
 
+// Error logs an error message with the context trace fields.
 func (l *ContextLogger) Error(msg string) {
 	if len(l.ctx) == 0 {
 		logger.sugar.Errorw(msg, "id", l.id)
@@ -152,24 +158,28 @@ func (l *ContextLogger) Error(msg string) {
 	}
 }
 
+// Debugf formats and logs a debug message when debug level is enabled.
 func (l *ContextLogger) Debugf(tpl string, args ...any) {
 	if logger.level.Enabled(zap.DebugLevel) {
 		l.Debug(fmt.Sprintf(tpl, args...))
 	}
 }
 
+// Infof formats and logs an info message when info level is enabled.
 func (l *ContextLogger) Infof(tpl string, args ...any) {
 	if logger.level.Enabled(zap.InfoLevel) {
 		l.Info(fmt.Sprintf(tpl, args...))
 	}
 }
 
+// Warnf formats and logs a warning message when warn level is enabled.
 func (l *ContextLogger) Warnf(tpl string, args ...any) {
 	if logger.level.Enabled(zap.WarnLevel) {
 		l.Warn(fmt.Sprintf(tpl, args...))
 	}
 }
 
+// Errorf formats and logs an error message when error level is enabled.
 func (l *ContextLogger) Errorf(tpl string, args ...any) {
 	if logger.level.Enabled(zap.ErrorLevel) {
 		l.Error(fmt.Sprintf(tpl, args...))

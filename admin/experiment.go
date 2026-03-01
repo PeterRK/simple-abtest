@@ -260,7 +260,7 @@ func expUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 	if n == 0 {
-		logger.Warnf("[expUpdate] conflict: %d", id)
+		logger.Warnf("operation conflict: %d", id)
 		w.WriteHeader(http.StatusConflict)
 		return
 	}
@@ -335,7 +335,7 @@ func expShuffle(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	logger.Infof("suffle experiment %d", id)
+	logger.Infof("shuffle experiment %d", id)
 }
 
 func expSwitch(w http.ResponseWriter, r *http.Request, p httprouter.Params) {

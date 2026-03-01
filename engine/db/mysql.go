@@ -11,6 +11,7 @@ import (
 	"github.com/peterrk/simple-abtest/engine/core"
 )
 
+// Source fetches experiment data from a storage backend.
 type Source interface {
 	Fetch(ctx context.Context) (map[uint32][]core.Experiment, error)
 	Close()
@@ -31,6 +32,7 @@ func (s *mysqlSource) Close() {
 	s.client.Close()
 }
 
+// CreateMySQLSource opens a MySQL-backed Source using the given DSN.
 func CreateMySQLSource(config string) (Source, error) {
 	client, err := sql.Open("mysql", config)
 	if err != nil {
@@ -101,7 +103,7 @@ type group struct {
 	forceHit []string
 }
 
-type segemnt struct {
+type segment struct {
 	begin  uint32
 	end    uint32
 	seed   uint32
@@ -168,7 +170,7 @@ func (s *mysqlSource) getLayer(tx *sql.Tx, exps map[uint32]*experiment, lyrs map
 	return nil
 }
 
-func (s *mysqlSource) getSegment(tx *sql.Tx, lyrs map[uint32]*layer, segs map[uint32]*segemnt) error {
+func (s *mysqlSource) getSegment(tx *sql.Tx, lyrs map[uint32]*layer, segs map[uint32]*segment) error {
 	rows, err := tx.Stmt(s.stmts.getSegment).Query()
 	if err != nil {
 		return err
@@ -177,7 +179,7 @@ func (s *mysqlSource) getSegment(tx *sql.Tx, lyrs map[uint32]*layer, segs map[ui
 
 	for rows.Next() {
 		var segId, lyrId uint32
-		seg := &segemnt{}
+		seg := &segment{}
 		err = rows.Scan(&segId, &lyrId, &seg.begin, &seg.end, &seg.seed)
 		if err != nil {
 			return err
@@ -192,7 +194,7 @@ func (s *mysqlSource) getSegment(tx *sql.Tx, lyrs map[uint32]*layer, segs map[ui
 	return nil
 }
 
-func (s *mysqlSource) getGroup(tx *sql.Tx, segs map[uint32]*segemnt, grps map[uint32]*group) error {
+func (s *mysqlSource) getGroup(tx *sql.Tx, segs map[uint32]*segment, grps map[uint32]*group) error {
 	rows, err := tx.Stmt(s.stmts.getGroup).Query()
 	if err != nil {
 		return err
@@ -228,7 +230,7 @@ func (s *mysqlSource) Fetch(ctx context.Context) (map[uint32][]core.Experiment, 
 	apps := make(map[uint32][]uint32)
 	exps := make(map[uint32]*experiment)
 	lyrs := make(map[uint32]*layer)
-	segs := make(map[uint32]*segemnt)
+	segs := make(map[uint32]*segment)
 	grps := make(map[uint32]*group)
 
 	tx, err := s.client.BeginTx(ctx, &sql.TxOptions{

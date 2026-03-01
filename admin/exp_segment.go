@@ -277,7 +277,7 @@ func segShuffle(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	logger.Infof("suffle segment %d", id)
+	logger.Infof("shuffle segment %d", id)
 }
 
 func segRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
