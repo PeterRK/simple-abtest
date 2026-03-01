@@ -87,6 +87,7 @@ func bindSegOp(router *httprouter.Router, registry *prometheus.Registry) {
 }
 
 func segGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("segGetOne")
 	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -98,7 +99,7 @@ func segGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		ReadOnly:  true,
 	})
 	if err != nil {
-		utils.GetLogger().Errorf("fail to start transaction: %v", err)
+		logger.Errorf("fail to start transaction: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -116,7 +117,7 @@ func segGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		if err == sql.ErrNoRows {
 			w.WriteHeader(http.StatusNotFound)
 		} else {
-			utils.GetLogger().Errorf("fail to run sql[seg.getOne]: %v", err)
+			logger.Errorf("fail to run sql[seg.getOne]: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 		return
@@ -124,7 +125,7 @@ func segGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	rows, err := tx.Stmt(grpSql.getList).Query(resp.Id)
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[grp.getList]: %v", err)
+		logger.Errorf("fail to run sql[grp.getList]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -134,32 +135,33 @@ func segGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		var grp grpSummary
 		err = rows.Scan(&grp.Id, &grp.Name, &grp.Share, &grp.IsDefault)
 		if err != nil {
-			utils.GetLogger().Errorf("fail to run sql[grp.getList]: %v", err)
+			logger.Errorf("fail to run sql[grp.getList]: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		resp.Group = append(resp.Group, grp)
 	}
 
-	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
 }
 
-func createDefaultSegment(tx *sql.Tx, lyrId uint32) (uint32, error) {
+func createDefaultSegment(logger *utils.ContextLogger, tx *sql.Tx, lyrId uint32) (uint32, error) {
 	id, err := utils.SqlCreate(tx.Stmt(segSql.create), lyrId, 0, rand.Uint32())
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[seg.create]: %v", err)
+		logger.Errorf("fail to run sql[seg.create]: %v", err)
 	} else {
-		_, err = createDefultGroup(tx, uint32(id))
+		_, err = createDefultGroup(logger, tx, uint32(id))
 	}
 	return uint32(id), err
 }
 
 func segCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("segCreate")
 	req := &struct {
 		LyrId  uint32 `json:"lyr_id"`
 		LyrVer uint32 `json:"lyr_ver"`
 	}{}
-	if err := utils.HttpGetJsonArgsWithLog(r, req); err != nil {
+	if err := utils.HttpGetJsonArgsWithLog(logger, r, req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -168,7 +170,7 @@ func segCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		Isolation: sql.LevelReadUncommitted,
 	})
 	if err != nil {
-		utils.GetLogger().Errorf("fail to start transaction: %v", err)
+		logger.Errorf("fail to start transaction: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -177,23 +179,23 @@ func segCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	id, err := utils.SqlCreate(tx.Stmt(segSql.create),
 		req.LyrId, 100, rand.Uint32())
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[seg.create]: %v", err)
+		logger.Errorf("fail to run sql[seg.create]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	if _, err = createDefultGroup(tx, uint32(id)); err != nil {
+	if _, err = createDefultGroup(logger, tx, uint32(id)); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	code := touch(tx.Stmt(lyrSql.touch), req.LyrId, req.LyrVer, "lyr", "segCreate")
+	code := touch(logger, tx.Stmt(lyrSql.touch), req.LyrId, req.LyrVer, "lyr")
 	if code != http.StatusOK {
 		w.WriteHeader(code)
 		return
 	}
 	if err = tx.Commit(); err != nil {
-		utils.GetLogger().Errorf("fail to commit transaction: %v", err)
+		logger.Errorf("fail to commit transaction: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -203,10 +205,11 @@ func segCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	resp.Begin = 100
 	resp.End = 100
 	resp.Version = 0
-	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
 }
 
 func segDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("segDelete")
 	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -217,7 +220,7 @@ func segDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		LyrVer  uint32 `json:"lyr_ver"`
 		Version uint32 `json:"version"`
 	}{}
-	if err = utils.HttpGetJsonArgsWithLog(r, req); err != nil {
+	if err = utils.HttpGetJsonArgsWithLog(logger, r, req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -226,7 +229,7 @@ func segDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		Isolation: sql.LevelReadUncommitted,
 	})
 	if err != nil {
-		utils.GetLogger().Errorf("fail to start transaction: %v", err)
+		logger.Errorf("fail to start transaction: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -234,29 +237,30 @@ func segDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	n, err := utils.SqlModify(tx.Stmt(segSql.remove), id, req.LyrId, req.Version)
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[seg.remove]: %v", err)
+		logger.Errorf("fail to run sql[seg.remove]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	if n == 0 {
-		utils.GetLogger().Warnf("[segDelete] conflict: %d", id)
+		logger.Warnf("operation conflict: %d", id)
 		w.WriteHeader(http.StatusConflict)
 		return
 	}
 
-	code := touch(tx.Stmt(lyrSql.touch), req.LyrId, req.LyrVer, "lyr", "segDelete")
+	code := touch(logger, tx.Stmt(lyrSql.touch), req.LyrId, req.LyrVer, "lyr")
 	if code != http.StatusOK {
 		w.WriteHeader(code)
 		return
 	}
 	if err = tx.Commit(); err != nil {
-		utils.GetLogger().Errorf("fail to commit transaction: %v", err)
+		logger.Errorf("fail to commit transaction: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 }
 
 func segShuffle(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("segShuffle")
 	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -265,7 +269,7 @@ func segShuffle(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	n, err := utils.SqlModify(segSql.shuffle, rand.Uint32(), id)
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[seg.shuffle]: %v", err)
+		logger.Errorf("fail to run sql[seg.shuffle]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -273,10 +277,11 @@ func segShuffle(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	utils.GetLogger().Infof("suffle segment %d", id)
+	logger.Infof("suffle segment %d", id)
 }
 
 func segRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("segRebalance")
 	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -287,7 +292,7 @@ func segRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		GrpId   uint32 `json:"grp_id"`
 		Share   uint32 `json:"share"`
 	}{}
-	if err = utils.HttpGetJsonArgsWithLog(r, req); err != nil {
+	if err = utils.HttpGetJsonArgsWithLog(logger, r, req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -304,7 +309,7 @@ func segRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		if err == sql.ErrNoRows {
 			w.WriteHeader(http.StatusConflict)
 		} else {
-			utils.GetLogger().Errorf("fail to run sql[grp.getDft]: %v", err)
+			logger.Errorf("fail to run sql[grp.getDft]: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 		return
@@ -314,7 +319,7 @@ func segRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 	copy(dft.bitmap[:], tmp)
 	if dftId == req.GrpId {
-		utils.GetLogger().Warn("can not rebalance default group")
+		logger.Warn("can not rebalance default group")
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
@@ -324,7 +329,7 @@ func segRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		if err == sql.ErrNoRows {
 			w.WriteHeader(http.StatusConflict)
 		} else {
-			utils.GetLogger().Errorf("fail to run sql[grp.getMap]: %v", err)
+			logger.Errorf("fail to run sql[grp.getMap]: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 		return
@@ -335,7 +340,7 @@ func segRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	copy(grp.bitmap[:], tmp)
 	total := dft.share + grp.share
 	if req.Share > total {
-		utils.GetLogger().Warn("no enough slots: %d > %d", req.Share, dft.share+grp.share)
+		logger.Warnf("no enough slots: %d > %d", req.Share, dft.share+grp.share)
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
@@ -352,7 +357,7 @@ func segRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		grp.bitmap[i] = 0
 	}
 	if len(slots) != int(total) {
-		utils.GetLogger().Errorf("broken group share: %d & %d", dftId, req.GrpId)
+		logger.Errorf("broken group share: %d & %d", dftId, req.GrpId)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -388,7 +393,7 @@ func segRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		Isolation: sql.LevelReadUncommitted,
 	})
 	if err != nil {
-		utils.GetLogger().Errorf("fail to start transaction: %v", err)
+		logger.Errorf("fail to start transaction: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -397,11 +402,11 @@ func segRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	adjust := func(grpId, share uint32, bitmap []byte) bool {
 		n, err := utils.SqlModify(tx.Stmt(grpSql.adjust), share, bitmap[:], grpId)
 		if err != nil {
-			utils.GetLogger().Errorf("fail to run sql[grp.adjust]: %v", err)
+			logger.Errorf("fail to run sql[grp.adjust]: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return false
 		} else if n != 1 {
-			utils.GetLogger().Warnf("[segRebalance] conflict: %d", id)
+			logger.Warnf("operation conflict: %d", id)
 			w.WriteHeader(http.StatusConflict)
 			return false
 		}
@@ -412,13 +417,13 @@ func segRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	code := touch(tx.Stmt(segSql.touch), uint32(id), req.Version, "seg", "segRebalance")
+	code := touch(logger, tx.Stmt(segSql.touch), uint32(id), req.Version, "seg")
 	if code != http.StatusOK {
 		w.WriteHeader(code)
 		return
 	}
 	if err = tx.Commit(); err != nil {
-		utils.GetLogger().Errorf("fail to commit transaction: %v", err)
+		logger.Errorf("fail to commit transaction: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

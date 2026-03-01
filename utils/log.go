@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"sync/atomic"
-	"unsafe"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -107,118 +106,72 @@ func SetLogLevel(lv LogLevel) {
 	logger.level.SetLevel(lv)
 }
 
-func init() {
-	if unsafe.Sizeof(zap.DebugLevel) > unsafe.Sizeof(uintptr(0)) {
-		panic("zapcore.Level is not simple")
-	}
-}
-
-// LogFilter provides a lightweight level filter in front of the global logger.
-type LogFilter struct {
-	level zapcore.Level
-}
-
-// SetLevel sets the minimum enabled level on LogFilter.
-func (l *LogFilter) SetLevel(lv LogLevel) {
-	l.level = zapcore.Level(lv)
-}
-
-func (l *LogFilter) Debug(args ...interface{}) {
-	if l.level.Enabled(zap.DebugLevel) {
-		logger.sugar.Debug(args...)
-	}
-}
-
-func (l *LogFilter) Info(args ...interface{}) {
-	if l.level.Enabled(zap.InfoLevel) {
-		logger.sugar.Info(args...)
-	}
-}
-
-func (l *LogFilter) Warn(args ...interface{}) {
-	if l.level.Enabled(zap.WarnLevel) {
-		logger.sugar.Warn(args...)
-	}
-}
-
-func (l *LogFilter) Error(args ...interface{}) {
-	if l.level.Enabled(zap.ErrorLevel) {
-		logger.sugar.Error(args...)
-	}
-}
-
-func (l *LogFilter) Debugf(tpl string, args ...interface{}) {
-	if l.level.Enabled(zap.DebugLevel) {
-		logger.sugar.Debugf(tpl, args...)
-	}
-}
-
-func (l *LogFilter) Infof(tpl string, args ...interface{}) {
-	if l.level.Enabled(zap.InfoLevel) {
-		logger.sugar.Infof(tpl, args...)
-	}
-}
-
-func (l *LogFilter) Warnf(tpl string, args ...interface{}) {
-	if l.level.Enabled(zap.WarnLevel) {
-		logger.sugar.Warnf(tpl, args...)
-	}
-}
-
-func (l *LogFilter) Errorf(tpl string, args ...interface{}) {
-	if l.level.Enabled(zap.ErrorLevel) {
-		logger.sugar.Errorf(tpl, args...)
-	}
-}
-
 var logTraceNum uint64
 
-type LogCtx struct {
-	trace uint64
+type ContextLogger struct {
+	id  uint64
+	ctx string
 }
 
-func InitLogCtx() LogCtx {
-	return LogCtx{
-		trace: atomic.AddUint64(&logTraceNum, 1),
+func NewContextLogger(ctx string) *ContextLogger {
+	return &ContextLogger{
+		id:  atomic.AddUint64(&logTraceNum, 1),
+		ctx: ctx,
 	}
 }
 
-func (c *LogCtx) LogDebug(msg string) {
-	logger.sugar.Debugw(msg, "trace", c.trace)
+func (l *ContextLogger) Debug(msg string) {
+	if len(l.ctx) == 0 {
+		logger.sugar.Debugw(msg, "id", l.id)
+	} else {
+		logger.sugar.Debugw(msg, "id", l.id, "ctx", l.ctx)
+	}
 }
 
-func (c *LogCtx) LogInfo(msg string) {
-	logger.sugar.Infow(msg, "trace", c.trace)
+func (l *ContextLogger) Info(msg string) {
+	if len(l.ctx) == 0 {
+		logger.sugar.Infow(msg, "id", l.id)
+	} else {
+		logger.sugar.Infow(msg, "id", l.id, "ctx", l.ctx)
+	}
 }
 
-func (c *LogCtx) LogWarn(msg string) {
-	logger.sugar.Warnw(msg, "trace", c.trace)
+func (l *ContextLogger) Warn(msg string) {
+	if len(l.ctx) == 0 {
+		logger.sugar.Warnw(msg, "id", l.id)
+	} else {
+		logger.sugar.Warnw(msg, "id", l.id, "ctx", l.ctx)
+	}
 }
 
-func (c *LogCtx) LogError(msg string) {
-	logger.sugar.Errorw(msg, "trace", c.trace)
+func (l *ContextLogger) Error(msg string) {
+	if len(l.ctx) == 0 {
+		logger.sugar.Errorw(msg, "id", l.id)
+	} else {
+		logger.sugar.Errorw(msg, "id", l.id, "ctx", l.ctx)
+	}
 }
 
-func (c *LogCtx) LogDebugf(tpl string, args ...any) {
+func (l *ContextLogger) Debugf(tpl string, args ...any) {
 	if logger.level.Enabled(zap.DebugLevel) {
-		logger.sugar.Debugw(fmt.Sprintf(tpl, args...), "trace", c.trace)
+		l.Debug(fmt.Sprintf(tpl, args...))
 	}
 }
 
-func (c *LogCtx) LogInfof(tpl string, args ...any) {
+func (l *ContextLogger) Infof(tpl string, args ...any) {
 	if logger.level.Enabled(zap.InfoLevel) {
-		logger.sugar.Infow(fmt.Sprintf(tpl, args...), "trace", c.trace)
+		l.Info(fmt.Sprintf(tpl, args...))
 	}
 }
 
-func (c *LogCtx) LogWarnf(tpl string, args ...any) {
+func (l *ContextLogger) Warnf(tpl string, args ...any) {
 	if logger.level.Enabled(zap.WarnLevel) {
-		logger.sugar.Warnw(fmt.Sprintf(tpl, args...), "trace", c.trace)
+		l.Warn(fmt.Sprintf(tpl, args...))
 	}
 }
 
-func (c *LogCtx) LogErrorf(tpl string, args ...any) {
+func (l *ContextLogger) Errorf(tpl string, args ...any) {
 	if logger.level.Enabled(zap.ErrorLevel) {
-		logger.sugar.Errorw(fmt.Sprintf(tpl, args...), "trace", c.trace)
+		l.Error(fmt.Sprintf(tpl, args...))
 	}
 }

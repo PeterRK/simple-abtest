@@ -77,9 +77,10 @@ type appDetail struct {
 }
 
 func appGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("appGetList")
 	rows, err := appSql.getList.Query()
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[app.getList]: %v", err)
+		logger.Errorf("fail to run sql[app.getList]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -90,16 +91,17 @@ func appGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		var rec appSummary
 		err := rows.Scan(&rec.Id, &rec.Name)
 		if err != nil {
-			utils.GetLogger().Errorf("fail to run sql[app.getList]: %v", err)
+			logger.Errorf("fail to run sql[app.getList]: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		resp = append(resp, rec)
 	}
-	utils.HttpReplyJsonWithLog(w, http.StatusOK, &resp)
+	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, &resp)
 }
 
 func appGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("appGetOne")
 	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -111,7 +113,7 @@ func appGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		ReadOnly:  true,
 	})
 	if err != nil {
-		utils.GetLogger().Errorf("fail to start transaction: %v", err)
+		logger.Errorf("fail to start transaction: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -129,7 +131,7 @@ func appGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		if err == sql.ErrNoRows {
 			w.WriteHeader(http.StatusNotFound)
 		} else {
-			utils.GetLogger().Errorf("fail to run sql[app.getOne]: %v", err)
+			logger.Errorf("fail to run sql[app.getOne]: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 		return
@@ -137,7 +139,7 @@ func appGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	rows, err := tx.Stmt(expSql.getList).Query(resp.Id)
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[exp.getList]: %v", err)
+		logger.Errorf("fail to run sql[exp.getList]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -147,19 +149,20 @@ func appGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		var exp expSummary
 		err = rows.Scan(&exp.Id, &exp.Name, &exp.Desc, &exp.Status, &exp.Version)
 		if err != nil {
-			utils.GetLogger().Errorf("fail to run sql[exp.getList]: %v", err)
+			logger.Errorf("fail to run sql[exp.getList]: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		resp.Experiment = append(resp.Experiment, exp)
 	}
 
-	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
 }
 
 func appCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("appCreate")
 	req := &appDetail{}
-	err := utils.HttpGetJsonArgsWithLog(r, req)
+	err := utils.HttpGetJsonArgsWithLog(logger, r, req)
 	if err != nil || len(req.Name) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -167,7 +170,7 @@ func appCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	id, err := utils.SqlCreate(appSql.create, req.Name, req.Desc)
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[app.create]: %v", err)
+		logger.Errorf("fail to run sql[app.create]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -175,10 +178,11 @@ func appCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	resp := req
 	resp.Id = uint32(id)
 	resp.Version = 0
-	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
 }
 
 func appUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("appUpdate")
 	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -186,7 +190,7 @@ func appUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	req := &appDetail{}
-	err = utils.HttpGetJsonArgsWithLog(r, req)
+	err = utils.HttpGetJsonArgsWithLog(logger, r, req)
 	if err != nil || len(req.Name) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -196,18 +200,19 @@ func appUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	n, err := utils.SqlModify(appSql.update, req.Name, req.Desc,
 		req.Version+1, req.Id, req.Version)
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[app.update]: %v", err)
+		logger.Errorf("fail to run sql[app.update]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	if n == 0 {
-		utils.GetLogger().Warnf("[appUpdate] conflict: %d", id)
+		logger.Warnf("operation conflict: %d", id)
 		w.WriteHeader(http.StatusConflict)
 		return
 	}
 }
 
 func appDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("appDelete")
 	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -216,7 +221,7 @@ func appDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	req := &struct {
 		Version uint32 `json:"version"`
 	}{}
-	if err = utils.HttpGetJsonArgsWithLog(r, req); err != nil {
+	if err = utils.HttpGetJsonArgsWithLog(logger, r, req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -224,37 +229,37 @@ func appDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	cnt := 0
 	err = expSql.count.QueryRow(id).Scan(&cnt)
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[exp.count]: %v", err)
+		logger.Errorf("fail to run sql[exp.count]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	if cnt > 0 {
-		utils.GetLogger().Warnf("try to delete application with experiments: %d", id)
+		logger.Warnf("try to delete application with experiments: %d", id)
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 
 	n, err := utils.SqlModify(appSql.remove, id, req.Version)
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[app.remove]: %v", err)
+		logger.Errorf("fail to run sql[app.remove]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	if n == 0 {
-		utils.GetLogger().Warnf("[appDelete] conflict: %d", id)
+		logger.Warnf("operation conflict: %d", id)
 		w.WriteHeader(http.StatusConflict)
 		return
 	}
 }
 
-func touch(stmt *sql.Stmt, id, version uint32, hint1, hint2 string) int {
+func touch(logger *utils.ContextLogger, stmt *sql.Stmt, id, version uint32, hint string) int {
 	n, err := utils.SqlModify(stmt, version+1, id, version)
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[%s.touch]: %v", hint1, err)
+		logger.Errorf("fail to run sql[%s.touch]: %v", hint, err)
 		return http.StatusInternalServerError
 	}
 	if n == 0 {
-		utils.GetLogger().Warnf("[%s] conflict: %d", hint2, id)
+		logger.Warnf("operation conflict: %d", id)
 		return http.StatusConflict
 	}
 	return http.StatusOK

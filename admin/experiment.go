@@ -103,6 +103,7 @@ func bindExpOp(router *httprouter.Router, registry *prometheus.Registry) {
 }
 
 func expGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("expGetOne")
 	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -114,7 +115,7 @@ func expGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		ReadOnly:  true,
 	})
 	if err != nil {
-		utils.GetLogger().Errorf("fail to start transaction: %v", err)
+		logger.Errorf("fail to start transaction: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -133,7 +134,7 @@ func expGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		if err == sql.ErrNoRows {
 			w.WriteHeader(http.StatusNotFound)
 		} else {
-			utils.GetLogger().Errorf("fail to run sql[exp.getOne]: %v", err)
+			logger.Errorf("fail to run sql[exp.getOne]: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 		return
@@ -142,7 +143,7 @@ func expGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	if len(filter) != 0 {
 		err = json.Unmarshal(filter, &resp.Filter)
 		if err != nil {
-			utils.GetLogger().Errorf("broken filter json in experiment %d", id)
+			logger.Errorf("broken filter json in experiment %d", id)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -150,7 +151,7 @@ func expGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	rows, err := tx.Stmt(lyrSql.getList).Query(resp.Id)
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[lyr.getList]: %v", err)
+		logger.Errorf("fail to run sql[lyr.getList]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -160,22 +161,23 @@ func expGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		var lyr lyrSummary
 		err = rows.Scan(&lyr.Id, &lyr.Name)
 		if err != nil {
-			utils.GetLogger().Errorf("fail to run sql[lyr.getList]: %v", err)
+			logger.Errorf("fail to run sql[lyr.getList]: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		resp.Layer = append(resp.Layer, lyr)
 	}
-	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
 }
 
 func expCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("expCreate")
 	req := &struct {
 		AppId  uint32 `json:"app_id"`
 		AppVer uint32 `json:"app_ver"`
 		expSummary
 	}{}
-	err := utils.HttpGetJsonArgsWithLog(r, req)
+	err := utils.HttpGetJsonArgsWithLog(logger, r, req)
 	if err != nil || len(req.Name) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -185,7 +187,7 @@ func expCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		Isolation: sql.LevelReadUncommitted,
 	})
 	if err != nil {
-		utils.GetLogger().Errorf("fail to start transaction: %v", err)
+		logger.Errorf("fail to start transaction: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -194,23 +196,23 @@ func expCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	id, err := utils.SqlCreate(tx.Stmt(expSql.create),
 		req.AppId, req.Name, req.Desc, rand.Uint32())
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[exp.create]: %v", err)
+		logger.Errorf("fail to run sql[exp.create]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	if _, err = createLayer(tx, uint32(id), req.Name); err != nil {
+	if _, err = createLayer(logger, tx, uint32(id), req.Name); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	code := touch(tx.Stmt(appSql.touch), req.AppId, req.AppVer, "app", "expCreate")
+	code := touch(logger, tx.Stmt(appSql.touch), req.AppId, req.AppVer, "app")
 	if code != http.StatusOK {
 		w.WriteHeader(code)
 		return
 	}
 	if err = tx.Commit(); err != nil {
-		utils.GetLogger().Errorf("fail to commit transaction: %v", err)
+		logger.Errorf("fail to commit transaction: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -221,10 +223,11 @@ func expCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	resp.Id = uint32(id)
 	resp.Status = 0
 	resp.Version = 0
-	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
 }
 
 func expUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("expUpdate")
 	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -232,7 +235,7 @@ func expUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	req := &expDetail{}
-	err = utils.HttpGetJsonArgsWithLog(r, req)
+	err = utils.HttpGetJsonArgsWithLog(logger, r, req)
 	if err != nil || len(req.Name) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -244,7 +247,7 @@ func expUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		_, err = core.ParseExpr(filter)
 	}
 	if err != nil {
-		utils.GetLogger().Warnf("illegal filter json: %v", req.Filter)
+		logger.Warnf("illegal filter json: %v", req.Filter)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -252,18 +255,19 @@ func expUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	n, err := utils.SqlModify(expSql.update, req.Name, req.Desc, filter,
 		req.Version+1, req.Id, req.Version)
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[exp.update]: %v", err)
+		logger.Errorf("fail to run sql[exp.update]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	if n == 0 {
-		utils.GetLogger().Warnf("[expUpdate] conflict: %d", id)
+		logger.Warnf("[expUpdate] conflict: %d", id)
 		w.WriteHeader(http.StatusConflict)
 		return
 	}
 }
 
 func expDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("expDelete")
 	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -274,7 +278,7 @@ func expDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		AppVer  uint32 `json:"app_ver"`
 		Version uint32 `json:"version"`
 	}{}
-	if err = utils.HttpGetJsonArgsWithLog(r, req); err != nil {
+	if err = utils.HttpGetJsonArgsWithLog(logger, r, req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -283,7 +287,7 @@ func expDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		Isolation: sql.LevelReadUncommitted,
 	})
 	if err != nil {
-		utils.GetLogger().Errorf("fail to start transaction: %v", err)
+		logger.Errorf("fail to start transaction: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -291,29 +295,30 @@ func expDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	n, err := utils.SqlModify(tx.Stmt(expSql.remove), id, req.AppId, req.Version)
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[exp.remove]: %v", err)
+		logger.Errorf("fail to run sql[exp.remove]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	if n == 0 {
-		utils.GetLogger().Warnf("[expDelete] conflict: %d", id)
+		logger.Warnf("operation conflict: %d", id)
 		w.WriteHeader(http.StatusConflict)
 		return
 	}
 
-	code := touch(tx.Stmt(appSql.touch), req.AppId, req.AppVer, "app", "expDelete")
+	code := touch(logger, tx.Stmt(appSql.touch), req.AppId, req.AppVer, "app")
 	if code != http.StatusOK {
 		w.WriteHeader(code)
 		return
 	}
 	if err = tx.Commit(); err != nil {
-		utils.GetLogger().Errorf("fail to commit transaction: %v", err)
+		logger.Errorf("fail to commit transaction: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 }
 
 func expShuffle(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("expShuffle")
 	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -322,7 +327,7 @@ func expShuffle(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	n, err := utils.SqlModify(expSql.shuffle, rand.Uint32(), id)
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[exp.shuffle]: %v", err)
+		logger.Errorf("fail to run sql[exp.shuffle]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -330,10 +335,11 @@ func expShuffle(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	utils.GetLogger().Infof("suffle experiment %d", id)
+	logger.Infof("suffle experiment %d", id)
 }
 
 func expSwitch(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("expSwitch")
 	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -343,7 +349,7 @@ func expSwitch(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		Status  uint8  `json:"status"`
 		Version uint32 `json:"version"`
 	}{}
-	if err = utils.HttpGetJsonArgsWithLog(r, req); err != nil {
+	if err = utils.HttpGetJsonArgsWithLog(logger, r, req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -354,14 +360,14 @@ func expSwitch(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	n, err := utils.SqlModify(expSql.toggle, req.Status, req.Version+1, id, req.Version)
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[exp.toggle]: %v", err)
+		logger.Errorf("fail to run sql[exp.toggle]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	if n == 0 {
-		utils.GetLogger().Warnf("[expSwitch] conflict: %d", id)
+		logger.Warnf("operation conflict: %d", id)
 		w.WriteHeader(http.StatusConflict)
 		return
 	}
-	utils.GetLogger().Infof("toggle experiment %d: %d", id, req.Status)
+	logger.Infof("toggle experiment %d: %d", id, req.Status)
 }

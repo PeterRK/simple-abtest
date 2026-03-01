@@ -137,8 +137,8 @@ func api(w http.ResponseWriter, r *http.Request) {
 		Context map[string]string `json:"context,omitempty"`
 	}{}
 
-	logger := utils.InitLogCtx()
-	err := utils.HttpGetJsonArgsWithLogger(logger, r, req)
+	logger := utils.NewContextLogger("")
+	err := utils.HttpGetJsonArgsWithLog(logger, r, req)
 	if err != nil || len(req.Key) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -152,5 +152,5 @@ func api(w http.ResponseWriter, r *http.Request) {
 	}{}
 	resp.Config, resp.Tags = core.GetExpConfig(exps, req.Key, req.Context)
 
-	utils.HttpReplyJsonWithLogger(logger, w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
 }

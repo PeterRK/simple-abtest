@@ -19,74 +19,35 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func httpGetJsonArgs(r *http.Request, obj any, log bool) error {
-	if log {
-		raw, err := io.ReadAll(r.Body)
-		if err != nil {
-			return err
-		}
-		if logger := GetLogger(); logger != nil {
-			logger.Debug(UnsafeBytesToString(raw))
-		}
-		return json.Unmarshal(raw, obj)
-	}
+// HttpGetJsonArgs decodes a JSON request body into obj without logging.
+func HttpGetJsonArgs(r *http.Request, obj any) error {
 	defer io.Copy(io.Discard, r.Body)
 	return json.NewDecoder(r.Body).Decode(obj)
 }
 
-func httpReplyJson(w http.ResponseWriter, code int, obj any, log bool) error {
+// HttpReplyJson writes obj as JSON response with the given HTTP status code.
+func HttpReplyJson(w http.ResponseWriter, code int, obj any) error {
 	if obj == nil {
 		w.WriteHeader(code)
 		return nil
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	if log {
-		raw, err := json.Marshal(obj)
-		if err != nil {
-			return err
-		}
-		if logger := GetLogger(); logger != nil {
-			logger.Debug(UnsafeBytesToString(raw))
-		}
-		_, err = w.Write(raw)
-		return err
-	}
 	return json.NewEncoder(w).Encode(obj)
 }
 
-// HttpGetJsonArgs decodes a JSON request body into obj without logging.
-func HttpGetJsonArgs(r *http.Request, obj any) error {
-	return httpGetJsonArgs(r, obj, false)
-}
-
-// HttpGetJsonArgsWithLog decodes a JSON request body into obj and logs the raw body.
-func HttpGetJsonArgsWithLog(r *http.Request, obj any) error {
-	return httpGetJsonArgs(r, obj, true)
-}
-
-// HttpReplyJson writes obj as JSON response with the given HTTP status code.
-func HttpReplyJson(w http.ResponseWriter, code int, obj any) error {
-	return httpReplyJson(w, code, obj, false)
-}
-
-// HttpReplyJsonWithLog writes obj as JSON response and logs the encoded body.
-func HttpReplyJsonWithLog(w http.ResponseWriter, code int, obj any) error {
-	return httpReplyJson(w, code, obj, true)
-}
-
 // HttpGetJsonArgsWithLogger decodes a JSON body into obj and logs through LogCtx.
-func HttpGetJsonArgsWithLogger(logger LogCtx, r *http.Request, obj any) error {
+func HttpGetJsonArgsWithLog(logger *ContextLogger, r *http.Request, obj any) error {
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
 		return err
 	}
-	logger.LogDebug(UnsafeBytesToString(raw))
+	logger.Debug(UnsafeBytesToString(raw))
 	return json.Unmarshal(raw, obj)
 }
 
 // HttpReplyJsonWithLogger writes obj as JSON and logs through LogCtx.
-func HttpReplyJsonWithLogger(logger LogCtx, w http.ResponseWriter, code int, obj any) error {
+func HttpReplyJsonWithLog(logger *ContextLogger, w http.ResponseWriter, code int, obj any) error {
 	if obj == nil {
 		w.WriteHeader(code)
 		return nil
@@ -97,7 +58,7 @@ func HttpReplyJsonWithLogger(logger LogCtx, w http.ResponseWriter, code int, obj
 	if err != nil {
 		return err
 	}
-	logger.LogDebug(UnsafeBytesToString(raw))
+	logger.Debug(UnsafeBytesToString(raw))
 	_, err = w.Write(raw)
 	return err
 }

@@ -77,6 +77,7 @@ func bindLyrOp(router *httprouter.Router, registry *prometheus.Registry) {
 }
 
 func lyrGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("lyrGetOne")
 	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -88,7 +89,7 @@ func lyrGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		ReadOnly:  true,
 	})
 	if err != nil {
-		utils.GetLogger().Errorf("fail to start transaction: %v", err)
+		logger.Errorf("fail to start transaction: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -105,7 +106,7 @@ func lyrGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		if err == sql.ErrNoRows {
 			w.WriteHeader(http.StatusNotFound)
 		} else {
-			utils.GetLogger().Errorf("fail to run sql[lyr.getOne]: %v", err)
+			logger.Errorf("fail to run sql[lyr.getOne]: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 		return
@@ -113,7 +114,7 @@ func lyrGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	rows, err := tx.Stmt(segSql.getList).Query(resp.Id)
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[seg.getList]: %v", err)
+		logger.Errorf("fail to run sql[seg.getList]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -123,33 +124,34 @@ func lyrGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		var seg segSummary
 		err = rows.Scan(&seg.Id, &seg.Begin, &seg.End)
 		if err != nil {
-			utils.GetLogger().Errorf("fail to run sql[seg.getList]: %v", err)
+			logger.Errorf("fail to run sql[seg.getList]: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		resp.Segment = append(resp.Segment, seg)
 	}
 
-	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
 }
 
-func createLayer(tx *sql.Tx, expId uint32, name string) (uint32, error) {
+func createLayer(logger *utils.ContextLogger, tx *sql.Tx, expId uint32, name string) (uint32, error) {
 	id, err := utils.SqlCreate(tx.Stmt(lyrSql.create), expId, name)
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[lyr.create]: %v", err)
+		logger.Errorf("fail to run sql[lyr.create]: %v", err)
 	} else {
-		_, err = createDefaultSegment(tx, uint32(id))
+		_, err = createDefaultSegment(logger, tx, uint32(id))
 	}
 	return uint32(id), err
 }
 
 func lyrCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("lyrCreate")
 	req := &struct {
 		ExpId  uint32 `json:"exp_id"`
 		ExpVer uint32 `json:"exp_ver"`
 		lyrSummary
 	}{}
-	err := utils.HttpGetJsonArgsWithLog(r, req)
+	err := utils.HttpGetJsonArgsWithLog(logger, r, req)
 	if err != nil || len(req.Name) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -159,25 +161,25 @@ func lyrCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		Isolation: sql.LevelReadUncommitted,
 	})
 	if err != nil {
-		utils.GetLogger().Errorf("fail to start transaction: %v", err)
+		logger.Errorf("fail to start transaction: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	defer tx.Rollback()
 
-	id, err := createLayer(tx, req.ExpId, req.Name)
+	id, err := createLayer(logger, tx, req.ExpId, req.Name)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	code := touch(tx.Stmt(expSql.touch), req.ExpId, req.ExpVer, "exp", "lyrCreate")
+	code := touch(logger, tx.Stmt(expSql.touch), req.ExpId, req.ExpVer, "exp")
 	if code != http.StatusOK {
 		w.WriteHeader(code)
 		return
 	}
 	if err = tx.Commit(); err != nil {
-		utils.GetLogger().Errorf("fail to commit transaction: %v", err)
+		logger.Errorf("fail to commit transaction: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -186,10 +188,11 @@ func lyrCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	resp.Name = req.Name
 	resp.Id = uint32(id)
 	resp.Version = 0
-	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
 }
 
 func lyrUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("lyrUpdate")
 	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -197,7 +200,7 @@ func lyrUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	req := &lyrDetail{}
-	err = utils.HttpGetJsonArgsWithLog(r, req)
+	err = utils.HttpGetJsonArgsWithLog(logger, r, req)
 	if err != nil || len(req.Name) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -207,18 +210,19 @@ func lyrUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	n, err := utils.SqlModify(lyrSql.update, req.Name,
 		req.Version+1, req.Id, req.Version)
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[lyr.update]: %v", err)
+		logger.Errorf("fail to run sql[lyr.update]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	if n == 0 {
-		utils.GetLogger().Warnf("[lyrUpdate] conflict: %d", id)
+		logger.Warnf("operation conflict: %d", id)
 		w.WriteHeader(http.StatusConflict)
 		return
 	}
 }
 
 func lyrDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("lyrDelete")
 	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -229,7 +233,7 @@ func lyrDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		ExpVer  uint32 `json:"exp_ver"`
 		Version uint32 `json:"version"`
 	}{}
-	if err = utils.HttpGetJsonArgsWithLog(r, req); err != nil {
+	if err = utils.HttpGetJsonArgsWithLog(logger, r, req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -238,7 +242,7 @@ func lyrDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		Isolation: sql.LevelReadUncommitted,
 	})
 	if err != nil {
-		utils.GetLogger().Errorf("fail to start transaction: %v", err)
+		logger.Errorf("fail to start transaction: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -246,29 +250,30 @@ func lyrDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	n, err := utils.SqlModify(tx.Stmt(lyrSql.remove), id, req.ExpId, req.Version)
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[lyr.remove]: %v", err)
+		logger.Errorf("fail to run sql[lyr.remove]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	if n == 0 {
-		utils.GetLogger().Warnf("[lyrDelete] conflict: %d", id)
+		logger.Warnf("operation conflict: %d", id)
 		w.WriteHeader(http.StatusConflict)
 		return
 	}
 
-	code := touch(tx.Stmt(expSql.touch), req.ExpId, req.ExpVer, "exp", "lyrDelete")
+	code := touch(logger, tx.Stmt(expSql.touch), req.ExpId, req.ExpVer, "exp")
 	if code != http.StatusOK {
 		w.WriteHeader(code)
 		return
 	}
 	if err = tx.Commit(); err != nil {
-		utils.GetLogger().Errorf("fail to commit transaction: %v", err)
+		logger.Errorf("fail to commit transaction: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 }
 
 func lyrRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("lyrRebalance")
 	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -278,7 +283,7 @@ func lyrRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		Version uint32       `json:"version"`
 		Segment []segSummary `json:"segment,omitempty"`
 	}{}
-	err = utils.HttpGetJsonArgsWithLog(r, req)
+	err = utils.HttpGetJsonArgsWithLog(logger, r, req)
 	if err != nil || len(req.Segment) < 2 ||
 		req.Segment[0].Begin != 0 || req.Segment[len(req.Segment)-1].End != 100 {
 		w.WriteHeader(http.StatusBadRequest)
@@ -302,7 +307,7 @@ func lyrRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	rows, err := segSql.getList.Query(id)
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[seg.getList]: %v", err)
+		logger.Errorf("fail to run sql[seg.getList]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -313,7 +318,7 @@ func lyrRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		var seg segSummary
 		err = rows.Scan(&seg.Id, &seg.Begin, &seg.End)
 		if err != nil {
-			utils.GetLogger().Errorf("fail to run sql[seg.getList]: %v", err)
+			logger.Errorf("fail to run sql[seg.getList]: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -332,7 +337,7 @@ func lyrRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		Isolation: sql.LevelReadUncommitted,
 	})
 	if err != nil {
-		utils.GetLogger().Errorf("fail to start transaction: %v", err)
+		logger.Errorf("fail to start transaction: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -342,24 +347,24 @@ func lyrRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		seg := &req.Segment[i]
 		n, err := utils.SqlModify(tx.Stmt(segSql.adjust), seg.Begin, seg.End, seg.Id)
 		if err != nil {
-			utils.GetLogger().Errorf("fail to run sql[seg.adjust]: %v", err)
+			logger.Errorf("fail to run sql[seg.adjust]: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		if n == 0 {
-			utils.GetLogger().Warnf("[lyrRebalance] conflict: %d", id)
+			logger.Warnf("operation conflict: %d", id)
 			w.WriteHeader(http.StatusConflict)
 			return
 		}
 	}
 
-	code := touch(tx.Stmt(lyrSql.touch), uint32(id), req.Version, "lyr", "lyrRebalance")
+	code := touch(logger, tx.Stmt(lyrSql.touch), uint32(id), req.Version, "lyr")
 	if code != http.StatusOK {
 		w.WriteHeader(code)
 		return
 	}
 	if err = tx.Commit(); err != nil {
-		utils.GetLogger().Errorf("fail to commit transaction: %v", err)
+		logger.Errorf("fail to commit transaction: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

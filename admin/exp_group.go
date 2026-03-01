@@ -139,6 +139,7 @@ func bindGrpOp(router *httprouter.Router, registry *prometheus.Registry) {
 }
 
 func grpGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("grpGetOne")
 	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -157,7 +158,7 @@ func grpGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		if err == sql.ErrNoRows {
 			w.WriteHeader(http.StatusNotFound)
 		} else {
-			utils.GetLogger().Errorf("fail to run sql[grp.getOne]: %v", err)
+			logger.Errorf("fail to run sql[grp.getOne]: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 		return
@@ -169,10 +170,10 @@ func grpGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		resp.ForceHit = strings.Split(forceHit, ",")
 	}
 
-	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
 }
 
-func createDefultGroup(tx *sql.Tx, segId uint32) (uint32, error) {
+func createDefultGroup(logger *utils.ContextLogger, tx *sql.Tx, segId uint32) (uint32, error) {
 	var bitmap [125]byte
 	for i := 0; i < 125; i++ {
 		bitmap[i] = 0xff
@@ -180,18 +181,19 @@ func createDefultGroup(tx *sql.Tx, segId uint32) (uint32, error) {
 	id, err := utils.SqlCreate(tx.Stmt(grpSql.create),
 		segId, "DEFAULT", 1000, bitmap[:], true)
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[grp.create]: %v", err)
+		logger.Errorf("fail to run sql[grp.create]: %v", err)
 	}
 	return uint32(id), err
 }
 
 func grpCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("grpCreate")
 	req := &struct {
 		SegId  uint32 `json:"seg_id"`
 		SegVer uint32 `json:"seg_ver"`
 		grpSummary
 	}{}
-	err := utils.HttpGetJsonArgsWithLog(r, req)
+	err := utils.HttpGetJsonArgsWithLog(logger, r, req)
 	if err != nil || len(req.Name) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -201,7 +203,7 @@ func grpCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		Isolation: sql.LevelReadUncommitted,
 	})
 	if err != nil {
-		utils.GetLogger().Errorf("fail to start transaction: %v", err)
+		logger.Errorf("fail to start transaction: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -211,18 +213,18 @@ func grpCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	id, err := utils.SqlCreate(tx.Stmt(grpSql.create),
 		req.SegId, req.Name, 0, bitmap[:], false)
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[grp.create]: %v", err)
+		logger.Errorf("fail to run sql[grp.create]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	code := touch(tx.Stmt(segSql.touch), req.SegId, req.SegVer, "seg", "grpCreate")
+	code := touch(logger, tx.Stmt(segSql.touch), req.SegId, req.SegVer, "seg")
 	if code != http.StatusOK {
 		w.WriteHeader(code)
 		return
 	}
 	if err = tx.Commit(); err != nil {
-		utils.GetLogger().Errorf("fail to commit transaction: %v", err)
+		logger.Errorf("fail to commit transaction: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -234,10 +236,11 @@ func grpCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	resp.CfgId = 0
 	resp.Config = ""
 	resp.Version = 0
-	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
 }
 
 func grpUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("grpUpdate")
 	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -245,7 +248,7 @@ func grpUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	req := &grpDetail{}
-	err = utils.HttpGetJsonArgsWithLog(r, req)
+	err = utils.HttpGetJsonArgsWithLog(logger, r, req)
 	if err != nil || len(req.Name) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -256,18 +259,19 @@ func grpUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		strings.Join(req.ForceHit, ","), req.CfgId,
 		req.Version+1, req.Id, req.Version)
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[grp.update]: %v", err)
+		logger.Errorf("fail to run sql[grp.update]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	if n == 0 {
-		utils.GetLogger().Warnf("[grpUpdate] conflict: %d", id)
+		logger.Warnf("operation conflict: %d", id)
 		w.WriteHeader(http.StatusConflict)
 		return
 	}
 }
 
 func grpDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("grpDelete")
 	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -278,7 +282,7 @@ func grpDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		SegVer  uint32 `json:"seg_ver"`
 		Version uint32 `json:"version"`
 	}{}
-	if err = utils.HttpGetJsonArgsWithLog(r, req); err != nil {
+	if err = utils.HttpGetJsonArgsWithLog(logger, r, req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -287,7 +291,7 @@ func grpDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		Isolation: sql.LevelReadUncommitted,
 	})
 	if err != nil {
-		utils.GetLogger().Errorf("fail to start transaction: %v", err)
+		logger.Errorf("fail to start transaction: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -295,29 +299,30 @@ func grpDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	n, err := utils.SqlModify(tx.Stmt(grpSql.remove), id, req.SegId, req.Version)
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[grp.remove]: %v", err)
+		logger.Errorf("fail to run sql[grp.remove]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	if n == 0 {
-		utils.GetLogger().Warnf("[grpDelete] conflict: %d", id)
+		logger.Warnf("operation conflict: %d", id)
 		w.WriteHeader(http.StatusConflict)
 		return
 	}
 
-	code := touch(tx.Stmt(segSql.touch), req.SegId, req.SegVer, "seg", "grpDelete")
+	code := touch(logger, tx.Stmt(segSql.touch), req.SegId, req.SegVer, "seg")
 	if code != http.StatusOK {
 		w.WriteHeader(code)
 		return
 	}
 	if err = tx.Commit(); err != nil {
-		utils.GetLogger().Errorf("fail to commit transaction: %v", err)
+		logger.Errorf("fail to commit transaction: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 }
 
 func cfgGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("cfgGetList")
 	grpId, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -335,7 +340,7 @@ func cfgGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	rows, err := cfgSql.getList.Query(grpId, time.Unix(begin, 0))
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[cfg.getList]: %v", err)
+		logger.Errorf("fail to run sql[cfg.getList]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -347,7 +352,7 @@ func cfgGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		var stamp time.Time
 		err := rows.Scan(&id, &stamp)
 		if err != nil {
-			utils.GetLogger().Errorf("fail to run sql[cfg.getList]: %v", err)
+			logger.Errorf("fail to run sql[cfg.getList]: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -356,10 +361,11 @@ func cfgGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 			Stamp: stamp.Format(time.DateTime),
 		})
 	}
-	utils.HttpReplyJsonWithLog(w, http.StatusOK, &resp)
+	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, &resp)
 }
 
 func cfgGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("cfgGetOne")
 	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -372,7 +378,7 @@ func cfgGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		if err == sql.ErrNoRows {
 			w.WriteHeader(http.StatusNotFound)
 		} else {
-			utils.GetLogger().Errorf("fail to run sql[cfg.getOne]: %v", err)
+			logger.Errorf("fail to run sql[cfg.getOne]: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 		return
@@ -382,6 +388,7 @@ func cfgGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 }
 
 func cfgCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	logger := utils.NewContextLogger("cfgCreate")
 	grpId, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -396,11 +403,11 @@ func cfgCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	id, err := utils.SqlCreate(cfgSql.create, grpId, utils.UnsafeBytesToString(raw))
 	if err != nil {
-		utils.GetLogger().Errorf("fail to run sql[cfg.create]: %v", err)
+		logger.Errorf("fail to run sql[cfg.create]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	resp := &cfgSummary{Id: uint32(id)}
-	utils.HttpReplyJsonWithLog(w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
 }
