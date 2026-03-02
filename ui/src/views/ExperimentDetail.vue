@@ -15,12 +15,24 @@ const experiment = ref<Experiment | null>(null)
 const loading = ref(false)
 const appInfo = ref<{ id: number; version: number } | null>(null)
 const layerListRef = ref<InstanceType<typeof LayerList> | null>(null)
+const expSnapshot = ref<{ name: string; description?: string; filter: string } | null>(null)
+
+const getFilterText = (filter?: Experiment['filter']) => JSON.stringify(filter || [])
+
+const syncSnapshot = (exp: Experiment) => {
+  expSnapshot.value = {
+    name: exp.name,
+    description: exp.description,
+    filter: getFilterText(exp.filter)
+  }
+}
 
 const loadExp = async () => {
   loading.value = true
   try {
     const res = await getExp(expId)
     experiment.value = res.data
+    syncSnapshot(res.data)
   } catch (e) {
     ElMessage.error('Failed to load experiment')
   } finally {
@@ -30,6 +42,14 @@ const loadExp = async () => {
 
 const handleUpdate = async () => {
     if (!experiment.value) return
+    if (
+      expSnapshot.value &&
+      expSnapshot.value.name === experiment.value.name &&
+      expSnapshot.value.description === experiment.value.description &&
+      expSnapshot.value.filter === getFilterText(experiment.value.filter)
+    ) {
+      return
+    }
     const validation = validateExprNodes(experiment.value.filter || [])
     if (!validation.valid) {
       ElMessage.error(validation.message || '过滤条件不合法')
@@ -43,9 +63,10 @@ const handleUpdate = async () => {
             filter: experiment.value.filter
         })
         ElMessage.success('Experiment updated')
-        loadExp()
+        experiment.value.version = experiment.value.version + 1
+        syncSnapshot(experiment.value)
     } catch(e) {
-        ElMessage.error('Update failed')
+        ElMessage.error('更新失败，请手动刷新后重试')
     }
 }
 

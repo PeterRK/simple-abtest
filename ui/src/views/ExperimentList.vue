@@ -20,6 +20,7 @@ const currentApp = ref<Application | null>(null)
 // Exp Dialog
 const expDialogVisible = ref(false)
 const expForm = ref({ name: '', description: '' })
+const experimentStatusMap = ref(new Map<number, number>())
 
 const loadApps = async () => {
   try {
@@ -50,6 +51,11 @@ const loadExperiments = async () => {
     const appId = selectedAppId.value
     const res = await getApp(appId)
     experiments.value = res.data.experiment ? res.data.experiment : []
+    const statusMap = new Map<number, number>()
+    for (const exp of experiments.value) {
+      statusMap.set(exp.id, exp.status)
+    }
+    experimentStatusMap.value = statusMap
 
     currentApp.value = {
       id: res.data.id,
@@ -122,6 +128,12 @@ const handleUpdateApp = async () => {
     ElMessage.error('App version is missing')
     return
   }
+  if (
+    currentApp.value.name === appForm.value.name &&
+    (currentApp.value.description || '') === appForm.value.description
+  ) {
+    return
+  }
   try {
     await updateApp(currentApp.value.id, {
       name: appForm.value.name,
@@ -190,12 +202,15 @@ const handleExpClick = (row: Experiment) => {
 
 const handleSwitchChange = async (val: number | boolean | string, row: Experiment) => {
   const newStatus = val ? 1 : 0
+  const previousStatus = experimentStatusMap.value.get(row.id)
+  if (previousStatus === newStatus) return
   try {
     await switchExp(row.id, { status: newStatus, version: row.version })
     ElMessage.success('Status updated')
-    loadExperiments()
+    row.version = row.version + 1
+    experimentStatusMap.value.set(row.id, newStatus)
   } catch (e) {
-    ElMessage.error('Update failed')
+    ElMessage.error('更新失败，请手动刷新后重试')
     row.status = row.status === 1 ? 0 : 1
   }
 }

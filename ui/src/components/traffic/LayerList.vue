@@ -35,14 +35,19 @@
     <el-dialog v-model="rebalanceVisible" title="调整Segment流量" width="60%">
       <el-table :data="rebalanceSegments" size="small">
         <el-table-column prop="id" label="ID" width="80" />
+        <el-table-column label="Percent">
+          <template #default="{ row, $index }">
+            <el-input-number v-model="row.percent" :min="0" :max="100" size="small" @change="updateRanges($index)" />
+          </template>
+        </el-table-column>
         <el-table-column label="Begin">
           <template #default="{ row }">
             <span>{{ row.begin }}</span>
           </template>
         </el-table-column>
         <el-table-column label="End">
-          <template #default="{ row, $index }">
-            <el-input-number v-model="row.end" :min="row.begin" :max="100" size="small" @change="updateRanges($index)" />
+          <template #default="{ row }">
+            <span>{{ row.end }}</span>
           </template>
         </el-table-column>
       </el-table>
@@ -70,6 +75,7 @@ const emit = defineEmits(['refresh'])
 const activeLayers = ref<number[]>([])
 const layers = ref<Layer[]>([])
 const loadedLayerIds = ref(new Set<number>())
+const layerNameMap = ref(new Map<number, string>())
 
 const dialogVisible = ref(false)
 const form = ref({ name: '' })
@@ -87,6 +93,7 @@ const loadLayers = () => {
   if (!props.experiment?.layer || props.experiment.layer.length === 0) {
     layers.value = []
     loadedLayerIds.value = new Set()
+    layerNameMap.value = new Map()
     return
   }
   layers.value = props.experiment.layer.map(layer => ({
@@ -96,10 +103,16 @@ const loadLayers = () => {
     exp_id: layer.exp_id,
     exp_ver: layer.exp_ver
   }))
+  const map = new Map<number, string>()
+  for (const layer of layers.value) {
+    map.set(layer.id, layer.name)
+  }
+  layerNameMap.value = map
 }
 
 const updateLayerDetail = (detail: Layer) => {
   layers.value = layers.value.map(layer => (layer.id === detail.id ? detail : layer))
+  layerNameMap.value.set(detail.id, detail.name)
 }
 
 const fetchLayerDetail = async (layerId: number, force = false) => {
@@ -130,15 +143,18 @@ const handleCreate = async () => {
 }
 
 const handleUpdateLayer = async (layer: Layer) => {
+  const originalName = layerNameMap.value.get(layer.id)
+  if (originalName === layer.name) return
   try {
     await updateLyr(layer.id, {
       name: layer.name,
       version: layer.version
     })
     ElMessage.success('Layer updated')
-    emit('refresh')
+    layer.version = layer.version + 1
+    layerNameMap.value.set(layer.id, layer.name)
   } catch (e) {
-    // ignore
+    ElMessage.error('更新失败，请手动刷新后重试')
   }
 }
 
@@ -175,6 +191,7 @@ interface RebalanceItem {
   id: number
   begin: number
   end: number
+  percent: number
 }
 
 const rebalanceVisible = ref(false)
@@ -183,21 +200,27 @@ const rebalanceLayer = ref<Layer | null>(null)
 
 const openRebalanceDialog = (layer: Layer) => {
   rebalanceLayer.value = layer
-  rebalanceSegments.value = (layer.segment || []).map(s => ({ id: s.id, begin: s.begin, end: s.end }))
+  rebalanceSegments.value = (layer.segment || []).map(s => ({
+    id: s.id,
+    begin: s.begin,
+    end: s.end,
+    percent: s.end - s.begin
+  }))
+  updateRanges(0)
   rebalanceVisible.value = true
 }
 
 const updateRanges = (index: number) => {
   const list = rebalanceSegments.value
-  if (!list[index]) return
-  let currentEnd = list[index].end
-  for (let i = index + 1; i < list.length; i++) {
+  if (list.length === 0) return
+  let currentEnd = 0
+  for (let i = 0; i < list.length; i++) {
     const item = list[i]
     if (!item) continue
     item.begin = currentEnd
-    if (item.end < currentEnd) {
-      item.end = currentEnd
-    }
+    const safePercent = Math.max(0, Math.min(100 - currentEnd, item.percent || 0))
+    item.percent = safePercent
+    item.end = item.begin + safePercent
     currentEnd = item.end
   }
 }
@@ -205,15 +228,34 @@ const updateRanges = (index: number) => {
 const handleRebalance = async () => {
   if (!rebalanceLayer.value) return
   try {
+    const total = rebalanceSegments.value.reduce((sum, item) => sum + (item?.percent || 0), 0)
+    if (total !== 100) {
+      ElMessage.error('流量百分比总和需为100')
+      return
+    }
     await rebalanceLyr(rebalanceLayer.value.id, {
       version: rebalanceLayer.value.version!,
       segment: rebalanceSegments.value
     })
     ElMessage.success('Segments rebalanced')
+    const currentSegments = rebalanceLayer.value.segment || []
+    const versionMap = new Map(currentSegments.map(seg => [seg.id, seg.version]))
+    const nextSegments = rebalanceSegments.value.map(item => ({
+      id: item.id,
+      begin: item.begin,
+      end: item.end,
+      version: versionMap.get(item.id) || 0
+    }))
+    rebalanceLayer.value.segment = nextSegments
+    rebalanceLayer.value.version = rebalanceLayer.value.version! + 1
+    layers.value = layers.value.map(layer =>
+      layer.id === rebalanceLayer.value?.id
+        ? { ...layer, segment: nextSegments, version: rebalanceLayer.value.version! }
+        : layer
+    )
     rebalanceVisible.value = false
-    emit('refresh')
   } catch (e) {
-    // ignore
+    ElMessage.error('调整失败，请手动刷新后重试')
   }
 }
 
@@ -221,6 +263,10 @@ watch(
   () => props.experiment?.layer,
   () => {
     loadLayers()
+    loadedLayerIds.value = new Set()
+    for (const layerId of activeLayers.value) {
+      fetchLayerDetail(layerId, true)
+    }
   },
   { deep: true, immediate: true }
 )

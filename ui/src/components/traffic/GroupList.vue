@@ -102,6 +102,19 @@ const currentConfigContent = ref('')
 const configHistory = ref<Config[]>([])
 const selectedConfigId = ref<number | null>(null)
 const configDays = ref(7)
+const buildForceHitList = (text: string) =>
+  text
+    .split('\n')
+    .map(item => item.trim())
+    .filter(item => item.length > 0)
+
+const isSameList = (left: string[], right: string[]) => {
+  if (left.length !== right.length) return false
+  for (let i = 0; i < left.length; i++) {
+    if (left[i] !== right[i]) return false
+  }
+  return true
+}
 
 const resetGroupState = () => {
   selectedGroupDetail.value = null
@@ -181,13 +194,18 @@ const handleCreate = async () => {
 const handleUpdate = async () => {
   if (!selectedGroupDetail.value) return
   try {
-    const forceHit = forceHitText.value
-      .split('\n')
-      .map(item => item.trim())
-      .filter(item => item.length > 0)
+    const forceHit = buildForceHitList(forceHitText.value)
     const currentConfigId = selectedGroupDetail.value.cfg_id
     const activeConfigId = selectedConfigId.value ?? currentConfigId
     if (activeConfigId == null) return
+    const hasNameChange = selectedGroupDetail.value.name !== groupForm.value.name
+    const hasForceHitChange = !isSameList(selectedGroupDetail.value.force_hit || [], forceHit)
+    const hasConfigChange = activeConfigId !== currentConfigId
+    const hasContentChange = newConfigContent.value !== currentConfigContent.value
+    if (!hasNameChange && !hasForceHitChange && !hasConfigChange && !hasContentChange) return
+    let nextConfigId = activeConfigId
+    let nextConfigContent = currentConfigContent.value
+    let createdConfigId: number | null = null
     if (activeConfigId !== currentConfigId) {
       await updateGrp(selectedGroupDetail.value.id, {
         name: groupForm.value.name,
@@ -196,9 +214,11 @@ const handleUpdate = async () => {
         force_hit: forceHit
       })
     } else {
-      const hasContentChange = newConfigContent.value !== currentConfigContent.value
       if (hasContentChange) {
         const res = await createGrpCfg(selectedGroupDetail.value.id, newConfigContent.value)
+        createdConfigId = res.data.id
+        nextConfigId = res.data.id
+        nextConfigContent = newConfigContent.value
         await updateGrp(selectedGroupDetail.value.id, {
           name: groupForm.value.name,
           version: selectedGroupDetail.value.version,
@@ -212,13 +232,35 @@ const handleUpdate = async () => {
           cfg_id: currentConfigId ?? 0,
           force_hit: forceHit
         })
+        nextConfigId = currentConfigId ?? 0
       }
     }
     ElMessage.success('Group updated')
-    emit('refresh')
-    await loadGroupDetail(selectedGroupDetail.value.id)
+    const nextVersion = selectedGroupDetail.value.version + 1
+    selectedGroupDetail.value = {
+      ...selectedGroupDetail.value,
+      name: groupForm.value.name,
+      cfg_id: nextConfigId,
+      force_hit: forceHit,
+      version: nextVersion,
+      config: nextConfigContent
+    }
+    currentConfigContent.value = nextConfigContent
+    selectedConfigId.value = nextConfigId
+    if (createdConfigId != null && !configHistory.value.some(item => item.id === createdConfigId)) {
+      configHistory.value = [{ id: createdConfigId }, ...configHistory.value]
+    }
+    if (props.segment.group) {
+      const target = props.segment.group.find(item => item.id === selectedGroupDetail.value?.id)
+      if (target) {
+        target.name = groupForm.value.name
+        target.cfg_id = nextConfigId
+        target.force_hit = forceHit
+        target.version = nextVersion
+      }
+    }
   } catch (e) {
-    // ignore
+    ElMessage.error('更新失败，请手动刷新后重试')
   }
 }
 
