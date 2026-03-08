@@ -1,10 +1,8 @@
 package main
 
 import (
-	"context"
 	"database/sql"
 	"net/http"
-	"strconv"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/peterrk/simple-abtest/utils"
@@ -115,65 +113,55 @@ func appGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 func appGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	logger := utils.NewContextLogger("appGetOne")
-	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	id, ok := parseUintParam(w, p, "id")
+	if !ok {
 		return
 	}
-	if _, ok := requireAppPrivilege(logger, w, r, uint32(id), privilegeReadOnly); !ok {
+	if _, ok := requireAppPrivilege(logger, w, r, id, privilegeReadOnly); !ok {
 		return
 	}
-
-	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{
-		Isolation: sql.LevelRepeatableRead,
-		ReadOnly:  true,
-	})
-	if err != nil {
-		logger.Errorf("fail to start transaction: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	defer tx.Rollback()
 
 	resp := &struct {
 		appDetail
 		Experiment []expSummary `json:"experiment,omitempty"`
 	}{}
-	resp.Id = uint32(id)
-
-	err = tx.Stmt(appSql.getOne).QueryRow(id).Scan(
-		&resp.Name, &resp.Desc, &resp.Version)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			w.WriteHeader(http.StatusNotFound)
-		} else {
+	resp.Id = id
+	if !withTx(logger, w, &sql.TxOptions{
+		Isolation: sql.LevelRepeatableRead,
+		ReadOnly:  true,
+	}, func(tx *sql.Tx) int {
+		err := tx.Stmt(appSql.getOne).QueryRow(id).Scan(
+			&resp.Name, &resp.Desc, &resp.Version)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return http.StatusNotFound
+			}
 			logger.Errorf("fail to run sql[app.getOne]: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
+			return http.StatusInternalServerError
 		}
-		return
-	}
 
-	rows, err := tx.Stmt(expSql.getList).Query(resp.Id)
-	if err != nil {
-		logger.Errorf("fail to run sql[exp.getList]: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var exp expSummary
-		err = rows.Scan(&exp.Id, &exp.Name, &exp.Desc, &exp.Status, &exp.Version)
+		rows, err := tx.Stmt(expSql.getList).Query(resp.Id)
 		if err != nil {
 			logger.Errorf("fail to run sql[exp.getList]: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
+			return http.StatusInternalServerError
 		}
-		resp.Experiment = append(resp.Experiment, exp)
-	}
-	if err := rows.Err(); err != nil {
-		logger.Errorf("fail to iterate sql[exp.getList]: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
+		defer rows.Close()
+
+		for rows.Next() {
+			var exp expSummary
+			err = rows.Scan(&exp.Id, &exp.Name, &exp.Desc, &exp.Status, &exp.Version)
+			if err != nil {
+				logger.Errorf("fail to run sql[exp.getList]: %v", err)
+				return http.StatusInternalServerError
+			}
+			resp.Experiment = append(resp.Experiment, exp)
+		}
+		if err = rows.Err(); err != nil {
+			logger.Errorf("fail to iterate sql[exp.getList]: %v", err)
+			return http.StatusInternalServerError
+		}
+		return http.StatusOK
+	}) {
 		return
 	}
 
@@ -188,24 +176,30 @@ func appCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	req := &appDetail{}
-	err := utils.HttpGetJsonArgsWithLog(logger, r, req)
-	if err != nil || len(req.Name) == 0 {
+	if !getJsonArgs(logger, w, r, req) {
+		return
+	}
+	if len(req.Name) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	id, err := utils.SqlCreate(appSql.create, req.Name, req.Desc)
-	if err != nil {
-		logger.Errorf("fail to run sql[app.create]: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	appId := uint32(id)
-	if _, err = utils.SqlModify(privSql.update,
-		uid, appId, privilegeAdmin, uid,
-		privilegeAdmin, uid); err != nil {
-		logger.Errorf("fail to run sql[priv.update]: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
+	var appId uint32
+	if !withTx(logger, w, nil, func(tx *sql.Tx) int {
+		id, err := utils.SqlCreate(tx.Stmt(appSql.create), req.Name, req.Desc)
+		if err != nil {
+			logger.Errorf("fail to run sql[app.create]: %v", err)
+			return http.StatusInternalServerError
+		}
+		appId = uint32(id)
+		if _, err = utils.SqlModify(tx.Stmt(privSql.update),
+			uid, appId, privilegeAdmin, uid,
+			privilegeAdmin, uid); err != nil {
+			logger.Errorf("fail to run sql[priv.update]: %v", err)
+			return http.StatusInternalServerError
+		}
+		return http.StatusOK
+	}) {
 		return
 	}
 
@@ -217,22 +211,23 @@ func appCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 func appUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	logger := utils.NewContextLogger("appUpdate")
-	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	id, ok := parseUintParam(w, p, "id")
+	if !ok {
 		return
 	}
-	if _, ok := requireAppPrivilege(logger, w, r, uint32(id), privilegeAdmin); !ok {
+	if _, ok := requireAppPrivilege(logger, w, r, id, privilegeAdmin); !ok {
 		return
 	}
 
 	req := &appDetail{}
-	err = utils.HttpGetJsonArgsWithLog(logger, r, req)
-	if err != nil || len(req.Name) == 0 {
+	if !getJsonArgs(logger, w, r, req) {
+		return
+	}
+	if len(req.Name) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	req.Id = uint32(id)
+	req.Id = id
 
 	n, err := utils.SqlModify(appSql.update, req.Name, req.Desc,
 		req.Version+1, req.Id, req.Version)
@@ -250,24 +245,22 @@ func appUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 func appDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	logger := utils.NewContextLogger("appDelete")
-	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	id, ok := parseUintParam(w, p, "id")
+	if !ok {
 		return
 	}
-	if _, ok := requireAppPrivilege(logger, w, r, uint32(id), privilegeAdmin); !ok {
+	if _, ok := requireAppPrivilege(logger, w, r, id, privilegeAdmin); !ok {
 		return
 	}
 	req := &struct {
 		Version uint32 `json:"version"`
 	}{}
-	if err = utils.HttpGetJsonArgsWithLog(logger, r, req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	if !getJsonArgs(logger, w, r, req) {
 		return
 	}
 
 	cnt := 0
-	err = expSql.count.QueryRow(id).Scan(&cnt)
+	err := expSql.count.QueryRow(id).Scan(&cnt)
 	if err != nil {
 		logger.Errorf("fail to run sql[exp.count]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -290,17 +283,4 @@ func appDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusConflict)
 		return
 	}
-}
-
-func touch(logger *utils.ContextLogger, stmt *sql.Stmt, id, version uint32, hint string) int {
-	n, err := utils.SqlModify(stmt, version+1, id, version)
-	if err != nil {
-		logger.Errorf("fail to run sql[%s.touch]: %v", hint, err)
-		return http.StatusInternalServerError
-	}
-	if n == 0 {
-		logger.Warnf("operation conflict: %d", id)
-		return http.StatusConflict
-	}
-	return http.StatusOK
 }

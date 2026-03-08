@@ -1,10 +1,8 @@
 package main
 
 import (
-	"context"
 	"database/sql"
 	"net/http"
-	"strconv"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/peterrk/simple-abtest/utils"
@@ -78,64 +76,54 @@ func bindLyrOp(router *httprouter.Router, registry *prometheus.Registry) {
 
 func lyrGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	logger := utils.NewContextLogger("lyrGetOne")
-	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	id, ok := parseUintParam(w, p, "id")
+	if !ok {
 		return
 	}
-	if _, ok := requireLyrPrivilege(logger, w, r, uint32(id), privilegeReadOnly); !ok {
+	if _, ok := requireLyrPrivilege(logger, w, r, id, privilegeReadOnly); !ok {
 		return
 	}
-
-	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{
-		Isolation: sql.LevelRepeatableRead,
-		ReadOnly:  true,
-	})
-	if err != nil {
-		logger.Errorf("fail to start transaction: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	defer tx.Rollback()
 
 	resp := &struct {
 		lyrDetail
 		Segment []segSummary `json:"segment"`
 	}{}
-	resp.Id = uint32(id)
-
-	err = tx.Stmt(lyrSql.getOne).QueryRow(id).Scan(&resp.Name, &resp.Version)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			w.WriteHeader(http.StatusNotFound)
-		} else {
+	resp.Id = id
+	if !withTx(logger, w, &sql.TxOptions{
+		Isolation: sql.LevelRepeatableRead,
+		ReadOnly:  true,
+	}, func(tx *sql.Tx) int {
+		err := tx.Stmt(lyrSql.getOne).QueryRow(id).Scan(&resp.Name, &resp.Version)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return http.StatusNotFound
+			}
 			logger.Errorf("fail to run sql[lyr.getOne]: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
+			return http.StatusInternalServerError
 		}
-		return
-	}
 
-	rows, err := tx.Stmt(segSql.getList).Query(resp.Id)
-	if err != nil {
-		logger.Errorf("fail to run sql[seg.getList]: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var seg segSummary
-		err = rows.Scan(&seg.Id, &seg.Begin, &seg.End)
+		rows, err := tx.Stmt(segSql.getList).Query(resp.Id)
 		if err != nil {
 			logger.Errorf("fail to run sql[seg.getList]: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
+			return http.StatusInternalServerError
 		}
-		resp.Segment = append(resp.Segment, seg)
-	}
-	if err := rows.Err(); err != nil {
-		logger.Errorf("fail to iterate sql[seg.getList]: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
+		defer rows.Close()
+
+		for rows.Next() {
+			var seg segSummary
+			err = rows.Scan(&seg.Id, &seg.Begin, &seg.End)
+			if err != nil {
+				logger.Errorf("fail to run sql[seg.getList]: %v", err)
+				return http.StatusInternalServerError
+			}
+			resp.Segment = append(resp.Segment, seg)
+		}
+		if err = rows.Err(); err != nil {
+			logger.Errorf("fail to iterate sql[seg.getList]: %v", err)
+			return http.StatusInternalServerError
+		}
+		return http.StatusOK
+	}) {
 		return
 	}
 
@@ -159,8 +147,10 @@ func lyrCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		ExpVer uint32 `json:"exp_ver"`
 		lyrSummary
 	}{}
-	err := utils.HttpGetJsonArgsWithLog(logger, r, req)
-	if err != nil || len(req.Name) == 0 {
+	if !getJsonArgs(logger, w, r, req) {
+		return
+	}
+	if len(req.Name) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -168,58 +158,46 @@ func lyrCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{
+	var id uint32
+	if !withTx(logger, w, &sql.TxOptions{
 		Isolation: sql.LevelReadUncommitted,
-	})
-	if err != nil {
-		logger.Errorf("fail to start transaction: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	defer tx.Rollback()
-
-	id, err := createLayer(logger, tx, req.ExpId, req.Name)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	code := touch(logger, tx.Stmt(expSql.touch), req.ExpId, req.ExpVer, "exp")
-	if code != http.StatusOK {
-		w.WriteHeader(code)
-		return
-	}
-	if err = tx.Commit(); err != nil {
-		logger.Errorf("fail to commit transaction: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
+	}, func(tx *sql.Tx) int {
+		var err error
+		id, err = createLayer(logger, tx, req.ExpId, req.Name)
+		if err != nil {
+			return http.StatusInternalServerError
+		}
+		return touch(logger, tx.Stmt(expSql.touch), req.ExpId, req.ExpVer, "exp")
+	}) {
 		return
 	}
 
 	resp := &lyrDetail{}
 	resp.Name = req.Name
-	resp.Id = uint32(id)
+	resp.Id = id
 	resp.Version = 0
 	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
 }
 
 func lyrUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	logger := utils.NewContextLogger("lyrUpdate")
-	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	id, ok := parseUintParam(w, p, "id")
+	if !ok {
 		return
 	}
 
 	req := &lyrDetail{}
-	err = utils.HttpGetJsonArgsWithLog(logger, r, req)
-	if err != nil || len(req.Name) == 0 {
+	if !getJsonArgs(logger, w, r, req) {
+		return
+	}
+	if len(req.Name) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	if _, ok := requireLyrPrivilege(logger, w, r, uint32(id), privilegeReadWrite); !ok {
+	if _, ok := requireLyrPrivilege(logger, w, r, id, privilegeReadWrite); !ok {
 		return
 	}
-	req.Id = uint32(id)
+	req.Id = id
 
 	n, err := utils.SqlModify(lyrSql.update, req.Name,
 		req.Version+1, req.Id, req.Version)
@@ -237,9 +215,8 @@ func lyrUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 func lyrDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	logger := utils.NewContextLogger("lyrDelete")
-	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	id, ok := parseUintParam(w, p, "id")
+	if !ok {
 		return
 	}
 	req := &struct {
@@ -247,66 +224,50 @@ func lyrDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		ExpVer  uint32 `json:"exp_ver"`
 		Version uint32 `json:"version"`
 	}{}
-	if err = utils.HttpGetJsonArgsWithLog(logger, r, req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	if !getJsonArgs(logger, w, r, req) {
 		return
 	}
-	if _, ok := requireLyrPrivilege(logger, w, r, uint32(id), privilegeReadWrite); !ok {
+	if _, ok := requireLyrPrivilege(logger, w, r, id, privilegeReadWrite); !ok {
 		return
 	}
 
-	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{
+	if !withTx(logger, w, &sql.TxOptions{
 		Isolation: sql.LevelReadUncommitted,
-	})
-	if err != nil {
-		logger.Errorf("fail to start transaction: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	defer tx.Rollback()
-
-	n, err := utils.SqlModify(tx.Stmt(lyrSql.remove), id, req.ExpId, req.Version)
-	if err != nil {
-		logger.Errorf("fail to run sql[lyr.remove]: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	if n == 0 {
-		logger.Warnf("operation conflict: %d", id)
-		w.WriteHeader(http.StatusConflict)
-		return
-	}
-
-	code := touch(logger, tx.Stmt(expSql.touch), req.ExpId, req.ExpVer, "exp")
-	if code != http.StatusOK {
-		w.WriteHeader(code)
-		return
-	}
-	if err = tx.Commit(); err != nil {
-		logger.Errorf("fail to commit transaction: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
+	}, func(tx *sql.Tx) int {
+		n, err := utils.SqlModify(tx.Stmt(lyrSql.remove), id, req.ExpId, req.Version)
+		if err != nil {
+			logger.Errorf("fail to run sql[lyr.remove]: %v", err)
+			return http.StatusInternalServerError
+		}
+		if n == 0 {
+			logger.Warnf("operation conflict: %d", id)
+			return http.StatusConflict
+		}
+		return touch(logger, tx.Stmt(expSql.touch), req.ExpId, req.ExpVer, "exp")
+	}) {
 		return
 	}
 }
 
 func lyrRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	logger := utils.NewContextLogger("lyrRebalance")
-	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	id, ok := parseUintParam(w, p, "id")
+	if !ok {
 		return
 	}
 	req := &struct {
 		Version uint32       `json:"version"`
 		Segment []segSummary `json:"segment,omitempty"`
 	}{}
-	err = utils.HttpGetJsonArgsWithLog(logger, r, req)
-	if err != nil || len(req.Segment) < 2 ||
+	if !getJsonArgs(logger, w, r, req) {
+		return
+	}
+	if len(req.Segment) < 2 ||
 		req.Segment[0].Begin != 0 || req.Segment[len(req.Segment)-1].End != 100 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	if _, ok := requireLyrPrivilege(logger, w, r, uint32(id), privilegeReadWrite); !ok {
+	if _, ok := requireLyrPrivilege(logger, w, r, id, privilegeReadWrite); !ok {
 		return
 	}
 	set := make(map[uint32]bool)
@@ -336,7 +297,7 @@ func lyrRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	cnt := 0
 	for rows.Next() {
 		var seg segSummary
-		err = rows.Scan(&seg.Id, &seg.Begin, &seg.End)
+		err := rows.Scan(&seg.Id, &seg.Begin, &seg.End)
 		if err != nil {
 			logger.Errorf("fail to run sql[seg.getList]: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -358,39 +319,23 @@ func lyrRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{
+	if !withTx(logger, w, &sql.TxOptions{
 		Isolation: sql.LevelReadUncommitted,
-	})
-	if err != nil {
-		logger.Errorf("fail to start transaction: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	defer tx.Rollback()
-
-	for i := 0; i < len(req.Segment); i++ {
-		seg := &req.Segment[i]
-		n, err := utils.SqlModify(tx.Stmt(segSql.adjust), seg.Begin, seg.End, seg.Id)
-		if err != nil {
-			logger.Errorf("fail to run sql[seg.adjust]: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
+	}, func(tx *sql.Tx) int {
+		for i := 0; i < len(req.Segment); i++ {
+			seg := &req.Segment[i]
+			n, err := utils.SqlModify(tx.Stmt(segSql.adjust), seg.Begin, seg.End, seg.Id)
+			if err != nil {
+				logger.Errorf("fail to run sql[seg.adjust]: %v", err)
+				return http.StatusInternalServerError
+			}
+			if n == 0 {
+				logger.Warnf("operation conflict: %d", id)
+				return http.StatusConflict
+			}
 		}
-		if n == 0 {
-			logger.Warnf("operation conflict: %d", id)
-			w.WriteHeader(http.StatusConflict)
-			return
-		}
-	}
-
-	code := touch(logger, tx.Stmt(lyrSql.touch), uint32(id), req.Version, "lyr")
-	if code != http.StatusOK {
-		w.WriteHeader(code)
-		return
-	}
-	if err = tx.Commit(); err != nil {
-		logger.Errorf("fail to commit transaction: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
+		return touch(logger, tx.Stmt(lyrSql.touch), id, req.Version, "lyr")
+	}) {
 		return
 	}
 }

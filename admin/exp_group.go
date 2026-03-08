@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"database/sql"
 	"io"
 	"net/http"
@@ -147,21 +146,20 @@ func stampToStr(stamp int64) string {
 
 func grpGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	logger := utils.NewContextLogger("grpGetOne")
-	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	id, ok := parseUintParam(w, p, "id")
+	if !ok {
 		return
 	}
-	if _, ok := requireGrpPrivilege(logger, w, r, uint32(id), privilegeReadOnly); !ok {
+	if _, ok := requireGrpPrivilege(logger, w, r, id, privilegeReadOnly); !ok {
 		return
 	}
 
 	resp := &grpDetail{}
-	resp.Id = uint32(id)
+	resp.Id = id
 
 	var stamp int64
 	var forceHit string
-	err = grpSql.getOne.QueryRow(id).Scan(&resp.Name,
+	err := grpSql.getOne.QueryRow(id).Scan(&resp.Name,
 		&resp.Share, &resp.IsDefault, &forceHit,
 		&resp.Version, &resp.CfgId, &stamp, &resp.Config)
 	if err != nil {
@@ -201,8 +199,10 @@ func grpCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		SegVer uint32 `json:"seg_ver"`
 		grpSummary
 	}{}
-	err := utils.HttpGetJsonArgsWithLog(logger, r, req)
-	if err != nil || len(req.Name) == 0 {
+	if !getJsonArgs(logger, w, r, req) {
+		return
+	}
+	if len(req.Name) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -210,39 +210,26 @@ func grpCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{
+	var id uint32
+	if !withTx(logger, w, &sql.TxOptions{
 		Isolation: sql.LevelReadUncommitted,
-	})
-	if err != nil {
-		logger.Errorf("fail to start transaction: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	defer tx.Rollback()
-
-	var bitmap [125]byte //zeros
-	id, err := utils.SqlCreate(tx.Stmt(grpSql.create),
-		req.SegId, req.Name, 0, bitmap[:], false)
-	if err != nil {
-		logger.Errorf("fail to run sql[grp.create]: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	code := touch(logger, tx.Stmt(segSql.touch), req.SegId, req.SegVer, "seg")
-	if code != http.StatusOK {
-		w.WriteHeader(code)
-		return
-	}
-	if err = tx.Commit(); err != nil {
-		logger.Errorf("fail to commit transaction: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
+	}, func(tx *sql.Tx) int {
+		var bitmap [125]byte //zeros
+		rawID, err := utils.SqlCreate(tx.Stmt(grpSql.create),
+			req.SegId, req.Name, 0, bitmap[:], false)
+		if err != nil {
+			logger.Errorf("fail to run sql[grp.create]: %v", err)
+			return http.StatusInternalServerError
+		}
+		id = uint32(rawID)
+		return touch(logger, tx.Stmt(segSql.touch), req.SegId, req.SegVer, "seg")
+	}) {
 		return
 	}
 
 	resp := &grpDetail{}
 	resp.Name = req.Name
-	resp.Id = uint32(id)
+	resp.Id = id
 	resp.Share = 0
 	resp.CfgId = 0
 	resp.Config = ""
@@ -252,22 +239,23 @@ func grpCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 func grpUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	logger := utils.NewContextLogger("grpUpdate")
-	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	id, ok := parseUintParam(w, p, "id")
+	if !ok {
 		return
 	}
 
 	req := &grpDetail{}
-	err = utils.HttpGetJsonArgsWithLog(logger, r, req)
-	if err != nil || len(req.Name) == 0 {
+	if !getJsonArgs(logger, w, r, req) {
+		return
+	}
+	if len(req.Name) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	if _, ok := requireGrpPrivilege(logger, w, r, uint32(id), privilegeReadWrite); !ok {
+	if _, ok := requireGrpPrivilege(logger, w, r, id, privilegeReadWrite); !ok {
 		return
 	}
-	req.Id = uint32(id)
+	req.Id = id
 
 	n, err := utils.SqlModify(grpSql.update, req.Name,
 		strings.Join(req.ForceHit, ","), req.CfgId,
@@ -286,9 +274,8 @@ func grpUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 func grpDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	logger := utils.NewContextLogger("grpDelete")
-	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	id, ok := parseUintParam(w, p, "id")
+	if !ok {
 		return
 	}
 	req := &struct {
@@ -296,60 +283,43 @@ func grpDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		SegVer  uint32 `json:"seg_ver"`
 		Version uint32 `json:"version"`
 	}{}
-	if err = utils.HttpGetJsonArgsWithLog(logger, r, req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	if !getJsonArgs(logger, w, r, req) {
 		return
 	}
-	if _, ok := requireGrpPrivilege(logger, w, r, uint32(id), privilegeReadWrite); !ok {
+	if _, ok := requireGrpPrivilege(logger, w, r, id, privilegeReadWrite); !ok {
 		return
 	}
 
-	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{
+	if !withTx(logger, w, &sql.TxOptions{
 		Isolation: sql.LevelReadUncommitted,
-	})
-	if err != nil {
-		logger.Errorf("fail to start transaction: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	defer tx.Rollback()
-
-	n, err := utils.SqlModify(tx.Stmt(grpSql.remove), id, req.SegId, req.Version)
-	if err != nil {
-		logger.Errorf("fail to run sql[grp.remove]: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	if n == 0 {
-		logger.Warnf("operation conflict: %d", id)
-		w.WriteHeader(http.StatusConflict)
-		return
-	}
-
-	code := touch(logger, tx.Stmt(segSql.touch), req.SegId, req.SegVer, "seg")
-	if code != http.StatusOK {
-		w.WriteHeader(code)
-		return
-	}
-	if err = tx.Commit(); err != nil {
-		logger.Errorf("fail to commit transaction: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
+	}, func(tx *sql.Tx) int {
+		n, err := utils.SqlModify(tx.Stmt(grpSql.remove), id, req.SegId, req.Version)
+		if err != nil {
+			logger.Errorf("fail to run sql[grp.remove]: %v", err)
+			return http.StatusInternalServerError
+		}
+		if n == 0 {
+			logger.Warnf("operation conflict: %d", id)
+			return http.StatusConflict
+		}
+		return touch(logger, tx.Stmt(segSql.touch), req.SegId, req.SegVer, "seg")
+	}) {
 		return
 	}
 }
 
 func cfgGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	logger := utils.NewContextLogger("cfgGetList")
-	grpId, err := strconv.ParseUint(p.ByName("id"), 10, 32)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	grpId, ok := parseUintParam(w, p, "id")
+	if !ok {
 		return
 	}
-	if _, ok := requireGrpPrivilege(logger, w, r, uint32(grpId), privilegeReadOnly); !ok {
+	if _, ok := requireGrpPrivilege(logger, w, r, grpId, privilegeReadOnly); !ok {
 		return
 	}
 	query := r.URL.Query()
 	var begin int64
+	var err error
 	if str := query.Get("begin"); len(str) != 0 {
 		begin, err = strconv.ParseInt(str, 10, 64)
 		if err != nil {
@@ -391,22 +361,20 @@ func cfgGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 func cfgGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	logger := utils.NewContextLogger("cfgGetOne")
-	grpId, err := strconv.ParseUint(p.ByName("id"), 10, 32)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	grpId, ok := parseUintParam(w, p, "id")
+	if !ok {
 		return
 	}
-	if _, ok := requireGrpPrivilege(logger, w, r, uint32(grpId), privilegeReadOnly); !ok {
+	if _, ok := requireGrpPrivilege(logger, w, r, grpId, privilegeReadOnly); !ok {
 		return
 	}
-	cfgId, err := strconv.ParseUint(p.ByName("cid"), 10, 32)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	cfgId, ok := parseUintParam(w, p, "cid")
+	if !ok {
 		return
 	}
 
 	var content string
-	err = cfgSql.getOne.QueryRow(cfgId, grpId).Scan(&content)
+	err := cfgSql.getOne.QueryRow(cfgId, grpId).Scan(&content)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			w.WriteHeader(http.StatusNotFound)
@@ -418,17 +386,17 @@ func cfgGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	logger.Debugf("get config by id: %d", cfgId)
+	w.Header().Set("Content-Type", "text/plain")
 	w.Write(utils.UnsafeStringToBytes(content))
 }
 
 func cfgCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	logger := utils.NewContextLogger("cfgCreate")
-	grpId, err := strconv.ParseUint(p.ByName("id"), 10, 32)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	grpId, ok := parseUintParam(w, p, "id")
+	if !ok {
 		return
 	}
-	if _, ok := requireGrpPrivilege(logger, w, r, uint32(grpId), privilegeReadWrite); !ok {
+	if _, ok := requireGrpPrivilege(logger, w, r, grpId, privilegeReadWrite); !ok {
 		return
 	}
 

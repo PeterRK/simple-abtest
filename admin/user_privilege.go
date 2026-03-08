@@ -172,6 +172,9 @@ func makePrivilegeKey(uid uint32) string {
 	return fmt.Sprintf("%s%d", privilegePrefix, uid)
 }
 
+// hashPassword intentionally uses sha256(password+salt) for this project.
+// Threat model: admin service is for trusted intranet use only.
+// If exposure scope changes (internet-facing / stronger compliance), migrate to Argon2id/Bcrypt.
 func hashPassword(password string, salt []byte) [32]byte {
 	h := sha256.New()
 	h.Write(utils.UnsafeStringToBytes(password))
@@ -372,7 +375,10 @@ func userCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		Name     string `json:"name"`
 		Password string `json:"password"`
 	}{}
-	if err := utils.HttpGetJsonArgsWithLog(logger, r, req); err != nil || len(req.Name) == 0 || len(req.Password) == 0 {
+	if !getJsonArgs(logger, w, r, req) {
+		return
+	}
+	if len(req.Name) == 0 || len(req.Password) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -415,7 +421,10 @@ func userLogin(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		Name     string `json:"name"`
 		Password string `json:"password"`
 	}{}
-	if err := utils.HttpGetJsonArgsWithLog(logger, r, req); err != nil || len(req.Name) == 0 || len(req.Password) == 0 {
+	if !getJsonArgs(logger, w, r, req) {
+		return
+	}
+	if len(req.Name) == 0 || len(req.Password) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -456,26 +465,28 @@ func userLogin(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 func userUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	logger := utils.NewContextLogger("userUpdate")
-	target, err := strconv.ParseUint(p.ByName("id"), 10, 32)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	target, ok := parseUintParam(w, p, "id")
+	if !ok {
 		return
 	}
 
-	if _, ok := requireSelf(logger, w, r, uint32(target)); !ok {
+	if _, ok := requireSelf(logger, w, r, target); !ok {
 		return
 	}
 
 	req := &struct {
 		Password string `json:"password"`
 	}{}
-	if err := utils.HttpGetJsonArgsWithLog(logger, r, req); err != nil || len(req.Password) == 0 {
+	if !getJsonArgs(logger, w, r, req) {
+		return
+	}
+	if len(req.Password) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	var salt []byte
-	err = userSql.getSalt.QueryRow(target).Scan(&salt)
+	err := userSql.getSalt.QueryRow(target).Scan(&salt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			w.WriteHeader(http.StatusNotFound)
@@ -501,13 +512,12 @@ func userUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 func userDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	logger := utils.NewContextLogger("userDelete")
-	target, err := strconv.ParseUint(p.ByName("id"), 10, 32)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	target, ok := parseUintParam(w, p, "id")
+	if !ok {
 		return
 	}
 
-	if _, ok := requireSelf(logger, w, r, uint32(target)); !ok {
+	if _, ok := requireSelf(logger, w, r, target); !ok {
 		return
 	}
 
@@ -523,10 +533,10 @@ func userDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	ctx := context.Background()
-	if err := rds.Del(ctx, makeSessionKey(uint32(target))).Err(); err != nil {
+	if err := rds.Del(ctx, makeSessionKey(target)).Err(); err != nil {
 		logger.Warnf("fail to clear session cache: %v", err)
 	}
-	if err := rds.Del(ctx, makePrivilegeKey(uint32(target))).Err(); err != nil {
+	if err := rds.Del(ctx, makePrivilegeKey(target)).Err(); err != nil {
 		logger.Warnf("fail to clear privilege cache: %v", err)
 	}
 }
@@ -539,12 +549,11 @@ type appPrivilege struct {
 
 func appGetPrivilege(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	logger := utils.NewContextLogger("appGetPrivilege")
-	appId, err := strconv.ParseUint(p.ByName("id"), 10, 32)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	appId, ok := parseUintParam(w, p, "id")
+	if !ok {
 		return
 	}
-	if _, ok := requireAppPrivilege(logger, w, r, uint32(appId), privilegeAdmin); !ok {
+	if _, ok := requireAppPrivilege(logger, w, r, appId, privilegeAdmin); !ok {
 		return
 	}
 
@@ -576,9 +585,8 @@ func appGetPrivilege(w http.ResponseWriter, r *http.Request, p httprouter.Params
 
 func appGrantPrivilege(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	logger := utils.NewContextLogger("appGrantPrivilege")
-	appId, err := strconv.ParseUint(p.ByName("id"), 10, 32)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+	appId, ok := parseUintParam(w, p, "id")
+	if !ok {
 		return
 	}
 	grantBy, ok := requireSession(logger, w, r)
@@ -590,9 +598,23 @@ func appGrantPrivilege(w http.ResponseWriter, r *http.Request, p httprouter.Para
 		Name      string `json:"name"`
 		Privilege int    `json:"privilege"`
 	}{}
-	if err := utils.HttpGetJsonArgsWithLog(logger, r, req); err != nil || len(req.Name) == 0 ||
+	if !getJsonArgs(logger, w, r, req) {
+		return
+	}
+	if len(req.Name) == 0 ||
 		req.Privilege < int(privilegeNoAccess) || req.Privilege > int(privilegeAdmin) {
 		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	allowed, err := checkAppPrivilege(grantBy, appId, privilegeAdmin)
+	if err != nil {
+		logger.Errorf("fail to check privilege: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if !allowed {
+		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 
@@ -605,16 +627,6 @@ func appGrantPrivilege(w http.ResponseWriter, r *http.Request, p httprouter.Para
 			logger.Errorf("fail to run sql[priv.getUidByName]: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 		}
-		return
-	}
-	allowed, err := checkAppPrivilege(grantBy, uint32(appId), privilegeAdmin)
-	if err != nil {
-		logger.Errorf("fail to check privilege: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	if !allowed {
-		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 
