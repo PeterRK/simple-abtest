@@ -36,11 +36,11 @@ type grpSummary struct {
 	Share     uint32 `json:"share"`
 	Name      string `json:"name"`
 	IsDefault bool   `json:"is_default,omitempty"`
+	Version   uint32 `json:"version,omitempty"`
 }
 
 type grpDetail struct {
 	grpSummary
-	Version  uint32   `json:"version"`
 	CfgId    uint32   `json:"cfg_id,omitempty"`
 	ForceHit []string `json:"force_hit,omitempty"`
 	CfgStamp string   `json:"cfg_stamp,omitempty"`
@@ -54,7 +54,7 @@ type cfgSummary struct {
 
 func prepareGrpSql(db *sql.DB) (err error) {
 	grpSql.getList, err = db.Prepare(
-		"SELECT `grp_id`,`name`,`share`,`is_default` FROM `exp_group` " +
+		"SELECT `grp_id`,`name`,`share`,`is_default`,`version` FROM `exp_group` " +
 			"WHERE `seg_id`=? ORDER BY `grp_id` ASC")
 	if err != nil {
 		return err

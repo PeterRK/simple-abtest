@@ -113,7 +113,10 @@ const loadLayers = () => {
   const currentActiveSet = new Set(activeLayers.value)
   layers.value = props.experiment.layer.map(layer => ({
     ...layer,
-    segment: (layer.segment || []).map(seg => ({ ...seg }))
+    segment: (layer.segment || []).map(seg => ({
+      ...seg,
+      version: seg.version ?? 0
+    }))
   }))
   const validLayerIds = new Set(layers.value.map(layer => layer.id))
   const nextActive = activeLayers.value.filter(layerId => validLayerIds.has(layerId))
@@ -133,8 +136,15 @@ const loadLayers = () => {
 }
 
 const updateLayerDetail = (detail: Layer) => {
-  layers.value = layers.value.map(layer => (layer.id === detail.id ? detail : layer))
-  layerNameMap.value.set(detail.id, detail.name)
+  const normalizedDetail: Layer = {
+    ...detail,
+    segment: (detail.segment || []).map(seg => ({
+      ...seg,
+      version: seg.version ?? 0
+    }))
+  }
+  layers.value = layers.value.map(layer => (layer.id === normalizedDetail.id ? normalizedDetail : layer))
+  layerNameMap.value.set(normalizedDetail.id, normalizedDetail.name)
 }
 
 const fetchLayerDetail = async (layerId: number, force = false) => {
@@ -214,7 +224,7 @@ const handleAddSegment = async (layer: Layer) => {
       lyr_id: layer.id,
       lyr_ver: layer.version!
     })
-    const nextSegments = [...(layer.segment || []), res.data]
+    const nextSegments = [...(layer.segment || []), { ...res.data, version: res.data.version ?? 0 }]
     const nextLayer = {
       ...layer,
       segment: nextSegments,

@@ -21,19 +21,15 @@ var segSql struct {
 }
 
 type segSummary struct {
-	Id    uint32 `json:"id"`
-	Begin uint32 `json:"begin"`
-	End   uint32 `json:"end"`
-}
-
-type segDetail struct {
-	segSummary
-	Version uint32 `json:"version"`
+	Id      uint32 `json:"id"`
+	Begin   uint32 `json:"begin"`
+	End     uint32 `json:"end"`
+	Version uint32 `json:"version,omitempty"`
 }
 
 func prepareSegSql(db *sql.DB) (err error) {
 	segSql.getList, err = db.Prepare(
-		"SELECT `seg_id`,`range_begin`,`range_end` FROM `exp_segment` " +
+		"SELECT `seg_id`,`range_begin`,`range_end`,`version` FROM `exp_segment` " +
 			"WHERE `lyr_id`=? ORDER BY `seg_id` ASC")
 	if err != nil {
 		return err
@@ -95,7 +91,7 @@ func segGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	resp := &struct {
-		segDetail
+		segSummary
 		Group []grpSummary `json:"group,omitempty"`
 	}{}
 	resp.Id = id
@@ -122,7 +118,7 @@ func segGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 		for rows.Next() {
 			var grp grpSummary
-			err = rows.Scan(&grp.Id, &grp.Name, &grp.Share, &grp.IsDefault)
+			err = rows.Scan(&grp.Id, &grp.Name, &grp.Share, &grp.IsDefault, &grp.Version)
 			if err != nil {
 				logger.Errorf("fail to run sql[grp.getList]: %v", err)
 				return http.StatusInternalServerError
@@ -184,11 +180,12 @@ func segCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	resp := &segDetail{}
-	resp.Id = id
-	resp.Begin = 100
-	resp.End = 100
-	resp.Version = 0
+	resp := &segSummary{
+		Id:      id,
+		Begin:   100,
+		End:     100,
+		Version: 0,
+	}
 	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
 }
 

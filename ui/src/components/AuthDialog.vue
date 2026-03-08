@@ -5,8 +5,10 @@ import { saveSession, useAuth } from '@/auth'
 import { ElMessage } from 'element-plus'
 import { useI18n, type Locale } from '@/i18n'
 import { isStrongPassword } from '@/utils/password'
+import { useRouter } from 'vue-router'
 
 const { authDialogVisible } = useAuth()
+const router = useRouter()
 const mode = ref<'login' | 'register'>('login')
 const loading = ref(false)
 const form = ref({ name: '', password: '', confirmPassword: '' })
@@ -43,6 +45,7 @@ const submit = async () => {
     const res = mode.value === 'login' ? await loginUser(req) : await registerUser(req)
     saveSession({ uid: res.data.uid, token: res.data.token, name: req.name })
     ElMessage.success(mode.value === 'login' ? t('message.loginSuccess') : t('message.registerSuccess'))
+    await router.push('/')
     resetForm()
   } catch (e: any) {
     const status = e?.response?.status

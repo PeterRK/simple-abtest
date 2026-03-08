@@ -451,7 +451,8 @@ Response `200 OK`:
     {
       "id": 4001,
       "begin": 0,
-      "end": 50
+      "end": 50,
+      "version": 1
     }
   ]
 }
@@ -563,7 +564,8 @@ Response `200 OK`:
       "id": 5001,
       "share": 500,
       "name": "DEFAULT",
-      "is_default": true
+      "is_default": true,
+      "version": 1
     }
   ]
 }

@@ -111,7 +111,7 @@ func lyrGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 		for rows.Next() {
 			var seg segSummary
-			err = rows.Scan(&seg.Id, &seg.Begin, &seg.End)
+			err = rows.Scan(&seg.Id, &seg.Begin, &seg.End, &seg.Version)
 			if err != nil {
 				logger.Errorf("fail to run sql[seg.getList]: %v", err)
 				return http.StatusInternalServerError

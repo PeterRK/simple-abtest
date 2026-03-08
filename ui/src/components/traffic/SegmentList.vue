@@ -48,17 +48,48 @@ const selectedSegmentDetail = computed(() =>
   selectedSegmentId.value != null ? segmentDetails.value[selectedSegmentId.value] || null : null
 )
 
+const normalizeSegmentDetail = (segment: Segment, fallback?: Segment): Segment => ({
+  ...segment,
+  begin: segment.begin ?? fallback?.begin ?? 0,
+  end: segment.end ?? fallback?.end ?? 0,
+  version: segment.version ?? fallback?.version ?? 0,
+  group: (segment.group || []).map(grp => ({
+    ...grp,
+    version: grp.version ?? 0
+  }))
+})
+
+const syncSegmentSummaryVersion = (segmentId: number, version: number) => {
+  const list = props.layer.segment || []
+  const idx = list.findIndex(item => item.id === segmentId)
+  if (idx < 0) return
+  const target = list[idx]
+  if (!target) return
+  if (target.version === version) return
+  const next = [...list]
+  next[idx] = { ...target, version }
+  props.layer.segment = next
+}
+
 const selectSegment = (seg: Segment) => {
   selectedSegmentId.value = seg.id
-  if (!segmentDetails.value[seg.id]) {
-    getSegment(seg.id)
-      .then(res => {
-        segmentDetails.value = { ...segmentDetails.value, [seg.id]: res.data }
-      })
-      .catch(() => {
-        // ignore
-      })
+  if (segmentDetails.value[seg.id]) return
+  const cachedSummary = (props.layer.segment || []).find(item => item.id === seg.id)
+  if (cachedSummary) {
+    segmentDetails.value = {
+      ...segmentDetails.value,
+      [seg.id]: normalizeSegmentDetail(cachedSummary)
+    }
   }
+  getSegment(seg.id)
+    .then(res => {
+      const detail = normalizeSegmentDetail(res.data, cachedSummary)
+      segmentDetails.value = { ...segmentDetails.value, [seg.id]: detail }
+      syncSegmentSummaryVersion(seg.id, detail.version)
+    })
+    .catch(() => {
+      // ignore
+    })
 }
 
 const autoSelectSingleSegment = () => {
@@ -98,7 +129,20 @@ watch(
     if (!segments.value.some(seg => seg.id === selectedSegmentId.value)) {
       selectedSegmentId.value = null
     }
-    segmentDetails.value = {}
+    const nextSegmentDetails: Record<number, Segment> = {}
+    for (const seg of segments.value) {
+      const cached = segmentDetails.value[seg.id]
+      if (cached) {
+        nextSegmentDetails[seg.id] = normalizeSegmentDetail(cached, seg)
+      }
+    }
+    segmentDetails.value = nextSegmentDetails
+    if (selectedSegmentId.value != null && !segmentDetails.value[selectedSegmentId.value]) {
+      const selectedSummary = segments.value.find(seg => seg.id === selectedSegmentId.value)
+      if (selectedSummary) {
+        selectSegment(selectedSummary)
+      }
+    }
     autoSelectSingleSegment()
   },
   { deep: true, immediate: true }
@@ -109,6 +153,14 @@ watch(
     selectedSegmentId.value = null
     segmentDetails.value = {}
     autoSelectSingleSegment()
+  }
+)
+
+watch(
+  () => [selectedSegmentId.value, selectedSegmentDetail.value?.version] as const,
+  ([segmentId, version]) => {
+    if (segmentId == null || typeof version !== 'number') return
+    syncSegmentSummaryVersion(segmentId, version)
   }
 )
 </script>

@@ -188,18 +188,24 @@ const openGroupDialog = (type: 'create') => {
 const bumpSegmentVersion = () => {
   if (typeof props.segment.version === 'number') {
     props.segment.version += 1
+    return
   }
+  props.segment.version = 1
 }
 
 const handleCreate = async () => {
   try {
+    const segmentVersion = props.segment.version ?? 0
     const res = await createGrp({
       seg_id: props.segment.id,
-      seg_ver: props.segment.version!,
+      seg_ver: segmentVersion,
       name: form.value.name
     })
     if (!props.segment.group) props.segment.group = []
-    props.segment.group.push(res.data)
+    props.segment.group.push({
+      ...res.data,
+      version: res.data.version ?? 0
+    })
     bumpSegmentVersion()
     ElMessage.success(t('message.groupCreated'))
     dialogVisible.value = false
@@ -288,11 +294,13 @@ const handleUpdate = async () => {
 
 const handleDelete = async (grp: Group) => {
     try {
+        const segmentVersion = props.segment.version ?? 0
+        const groupVersion = grp.version ?? 0
         await ElMessageBox.confirm(t('confirm.deleteGroup'), t('common.warning'), { type: 'warning' })
         await deleteGrp(grp.id, {
             seg_id: props.segment.id,
-            seg_ver: props.segment.version!,
-            version: grp.version
+            seg_ver: segmentVersion,
+            version: groupVersion
         })
         if (props.segment.group) {
           props.segment.group = props.segment.group.filter(item => item.id !== grp.id)
@@ -375,8 +383,9 @@ const handleRebalance = async () => {
       return
     }
     try {
+        const segmentVersion = props.segment.version ?? 0
         await rebalanceSeg(props.segment.id, {
-            version: props.segment.version!,
+            version: segmentVersion,
             grp_id: rebalanceGroup.value.id,
             share: nextShare
         })
