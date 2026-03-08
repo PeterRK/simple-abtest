@@ -431,6 +431,8 @@ const normalizeConfigContent = (content: unknown) => {
 
 const handleSelectConfig = async (cfg: Config | null) => {
   if (!cfg) return
+  const groupDetail = selectedGroupDetail.value
+  if (!groupDetail) return
   const cfgId = cfg.id
   selectedConfigId.value = cfgId
   const cached = configContentCache.get(cfgId)
@@ -440,7 +442,7 @@ const handleSelectConfig = async (cfg: Config | null) => {
   }
   let pending = configLoadInFlight.get(cfgId)
   if (!pending) {
-    pending = getConfig(cfgId).then(res => normalizeConfigContent(res.data))
+    pending = getConfig(groupDetail.id, cfgId).then(res => normalizeConfigContent(res.data))
     configLoadInFlight.set(cfgId, pending)
   }
   try {

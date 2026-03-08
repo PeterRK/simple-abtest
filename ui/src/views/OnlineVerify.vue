@@ -19,6 +19,10 @@ onMounted(async () => {
     const res = await getApps()
     apps.value = res.data
   } catch (e) {
+    if ((e as any)?.response?.status === 401) {
+      apps.value = []
+      return
+    }
     ElMessage.error(t('message.failedLoadApps'))
   }
 })

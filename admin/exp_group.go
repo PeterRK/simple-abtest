@@ -135,7 +135,7 @@ func bindGrpOp(router *httprouter.Router, registry *prometheus.Registry) {
 
 	router.Handle(http.MethodGet, "/api/grp/:id/cfg", cfgGetList)
 	router.Handle(http.MethodPost, "/api/grp/:id/cfg", cfgCreate)
-	router.Handle(http.MethodGet, "/api/grp/:gid/cfg/:cid", cfgGetOne)
+	router.Handle(http.MethodGet, "/api/grp/:id/cfg/:cid", cfgGetOne)
 }
 
 func stampToStr(stamp int64) string {
@@ -391,7 +391,7 @@ func cfgGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 func cfgGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	logger := utils.NewContextLogger("cfgGetOne")
-	grpId, err := strconv.ParseUint(p.ByName("gid"), 10, 32)
+	grpId, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return

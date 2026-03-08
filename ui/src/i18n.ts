@@ -12,6 +12,10 @@ const messages: Record<Locale, MessageTree> = {
       title: 'AB测试平台',
       experiments: '实验信息',
       verify: '在线验证',
+      profile: '我的账号',
+      accountSettings: '账号',
+      login: '登录/注册',
+      logout: '退出登录',
       language: '语言',
       langZh: '中文',
       langEn: 'English'
@@ -28,7 +32,8 @@ const messages: Record<Locale, MessageTree> = {
       cancel: '取消',
       confirm: '确定',
       warning: '提示',
-      detail: '详情'
+      detail: '详情',
+      operation: '操作'
     },
     message: {
       failedLoadApps: '加载应用失败',
@@ -62,6 +67,19 @@ const messages: Record<Locale, MessageTree> = {
       appInfoMissing: '无法获取应用信息',
       verifyRequired: 'App ID 和 Key 为必填项',
       verifyFailed: '验证失败或 JSON 非法',
+      authRequired: '用户名和密码均不能为空',
+      loginSuccess: '登录成功',
+      registerSuccess: '注册成功',
+      userExists: '用户名已存在',
+      loginFailed: '用户名或密码错误',
+      passwordRequired: '新密码不能为空',
+      passwordRule: '密码至少6位，且必须包含字母和数字',
+      confirmPasswordRequired: '请再次输入密码',
+      passwordMismatch: '两次输入的密码不一致',
+      passwordUpdated: '密码已更新',
+      userDeleted: '账号已注销',
+      failedLoadPrivileges: '加载授权失败',
+      privilegeUpdated: '授权已更新',
       invalidFilter: '过滤条件不合法',
       invalidExpr: '表达式结构非法',
       invalidLogicArgs: '逻辑算子参数不合法',
@@ -76,7 +94,9 @@ const messages: Record<Locale, MessageTree> = {
       deleteExperiment: '确认删除该实验？',
       deleteLayer: '确认删除该 Layer？',
       deleteSegment: '确认删除该 Segment？需先确保区间为空。',
-      deleteGroup: '确认删除该 Group？'
+      deleteGroup: '确认删除该 Group？',
+      deleteUser: '确认注销当前账号？此操作不可恢复。',
+      logout: '确认退出登录？'
     },
     list: {
       selectApp: '选择应用',
@@ -89,7 +109,43 @@ const messages: Record<Locale, MessageTree> = {
       expName: '实验名',
       expDesc: '实验描述',
       filter: '过滤条件',
-      createLayer: '新增 Layer'
+      createLayer: '新增 Layer',
+      appPrivilege: '授权情况',
+      privilegeTitle: '应用授权管理',
+      privilegeLevel: '权限级别',
+      grantor: '授权人',
+      targetUser: '用户名',
+      revoke: '撤销'
+    },
+    auth: {
+      loginTitle: '登录',
+      registerTitle: '注册',
+      needLoginTip: '请先登录或注册后继续使用。',
+      login: '登录',
+      register: '注册',
+      goRegister: '没有账号？去注册',
+      goLogin: '已有账号？去登录',
+      password: '密码',
+      confirmPassword: '确认密码'
+    },
+    profile: {
+      title: '账号信息',
+      uid: '用户 ID',
+      changePassword: '修改密码',
+      updatePassword: '更新密码',
+      deleteUser: '注销账号'
+    },
+    settings: {
+      title: '账号设置',
+      updatePassword: '修改密码',
+      logout: '退出登录',
+      deleteUser: '删除账号'
+    },
+    privilege: {
+      none: '无权限',
+      read: '只读',
+      write: '读写',
+      admin: '管理员'
     },
     verify: {
       title: '在线验证',
@@ -151,6 +207,10 @@ const messages: Record<Locale, MessageTree> = {
       title: 'AB Testing Platform',
       experiments: 'Experiments',
       verify: 'Verify',
+      profile: 'My Account',
+      accountSettings: 'Account',
+      login: 'Login/Register',
+      logout: 'Log out',
       language: 'Language',
       langZh: '中文',
       langEn: 'English'
@@ -167,7 +227,8 @@ const messages: Record<Locale, MessageTree> = {
       cancel: 'Cancel',
       confirm: 'Confirm',
       warning: 'Warning',
-      detail: 'Detail'
+      detail: 'Detail',
+      operation: 'Operation'
     },
     message: {
       failedLoadApps: 'Failed to load apps',
@@ -201,6 +262,19 @@ const messages: Record<Locale, MessageTree> = {
       appInfoMissing: 'Unable to resolve app info',
       verifyRequired: 'App ID and Key are required',
       verifyFailed: 'Verification failed or invalid JSON',
+      authRequired: 'Both username and password are required',
+      loginSuccess: 'Login succeeded',
+      registerSuccess: 'Registration succeeded',
+      userExists: 'Username already exists',
+      loginFailed: 'Invalid username or password',
+      passwordRequired: 'New password is required',
+      passwordRule: 'Password must be at least 6 characters and include letters and numbers',
+      confirmPasswordRequired: 'Please confirm your password',
+      passwordMismatch: 'Passwords do not match',
+      passwordUpdated: 'Password updated',
+      userDeleted: 'Account deleted',
+      failedLoadPrivileges: 'Failed to load privileges',
+      privilegeUpdated: 'Privilege updated',
       invalidFilter: 'Invalid filter condition',
       invalidExpr: 'Invalid expression structure',
       invalidLogicArgs: 'Invalid logical operator arguments',
@@ -215,7 +289,9 @@ const messages: Record<Locale, MessageTree> = {
       deleteExperiment: 'Delete this experiment?',
       deleteLayer: 'Delete this layer?',
       deleteSegment: 'Delete this segment? The range must be empty.',
-      deleteGroup: 'Delete this group?'
+      deleteGroup: 'Delete this group?',
+      deleteUser: 'Delete your account? This action cannot be undone.',
+      logout: 'Log out now?'
     },
     list: {
       selectApp: 'Select App',
@@ -228,7 +304,43 @@ const messages: Record<Locale, MessageTree> = {
       expName: 'Experiment Name',
       expDesc: 'Experiment Description',
       filter: 'Filter',
-      createLayer: 'New Layer'
+      createLayer: 'New Layer',
+      appPrivilege: 'Privileges',
+      privilegeTitle: 'App Privilege Management',
+      privilegeLevel: 'Privilege',
+      grantor: 'Grantor',
+      targetUser: 'Username',
+      revoke: 'Revoke'
+    },
+    auth: {
+      loginTitle: 'Login',
+      registerTitle: 'Register',
+      needLoginTip: 'Please login or register first.',
+      login: 'Login',
+      register: 'Register',
+      goRegister: 'No account? Register',
+      goLogin: 'Already have an account? Login',
+      password: 'Password',
+      confirmPassword: 'Confirm Password'
+    },
+    profile: {
+      title: 'Account Info',
+      uid: 'User ID',
+      changePassword: 'Change Password',
+      updatePassword: 'Update Password',
+      deleteUser: 'Delete Account'
+    },
+    settings: {
+      title: 'Account Settings',
+      updatePassword: 'Change Password',
+      logout: 'Log out',
+      deleteUser: 'Delete Account'
+    },
+    privilege: {
+      none: 'No Access',
+      read: 'Read Only',
+      write: 'Read/Write',
+      admin: 'Admin'
     },
     verify: {
       title: 'Online Verify',

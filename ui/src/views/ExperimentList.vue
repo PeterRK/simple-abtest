@@ -60,6 +60,13 @@ const loadApps = async () => {
     }
   } catch (e) {
     console.error(e)
+    if ((e as any)?.response?.status === 401) {
+      apps.value = []
+      selectedAppId.value = null
+      currentApp.value = null
+      experiments.value = []
+      return
+    }
     ElMessage.error(t('message.failedLoadApps'))
   }
 }
@@ -99,6 +106,11 @@ const loadExperiments = async () => {
     }
   } catch (e) {
     console.error(e)
+    if ((e as any)?.response?.status === 401) {
+      experiments.value = []
+      currentApp.value = null
+      return
+    }
     ElMessage.error(t('message.failedLoadExperiments'))
   } finally {
     loading.value = false

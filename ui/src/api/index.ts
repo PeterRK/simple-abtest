@@ -1,5 +1,6 @@
 import axios from 'axios'
 import type { Application, Experiment, Layer, Segment, Group, Config } from '@/types'
+import { clearSession, useAuth } from '@/auth'
 
 const adminApi = axios.create({
   baseURL: '/api'
@@ -9,12 +10,44 @@ const engineApi = axios.create({
   baseURL: '/engine'
 })
 
+adminApi.interceptors.request.use((config) => {
+  const { session } = useAuth()
+  if (session.value) {
+    config.headers = config.headers || {}
+    config.headers.SESSION_UID = String(session.value.uid)
+    config.headers.SESSION_TOKEN = session.value.token
+  }
+  return config
+})
+
+adminApi.interceptors.response.use(
+  (resp) => resp,
+  (error) => {
+    if (error?.response?.status === 401) {
+      clearSession()
+    }
+    return Promise.reject(error)
+  }
+)
+
+// User
+export const registerUser = (data: { name: string; password: string }) =>
+  adminApi.post<{ uid: number; token: string }>('/user', data)
+export const loginUser = (data: { name: string; password: string }) =>
+  adminApi.post<{ uid: number; token: string }>('/user/login', data)
+export const updateUserPassword = (uid: number, data: { password: string }) => adminApi.put(`/user/${uid}`, data)
+export const deleteUser = (uid: number) => adminApi.delete(`/user/${uid}`)
+
 // Application
 export const getApps = () => adminApi.get<Application[]>('/app')
 export const getApp = (id: number) => adminApi.get<Application>(`/app/${id}`)
 export const createApp = (data: { name: string; description?: string }) => adminApi.post<Application>('/app', data)
 export const updateApp = (id: number, data: { name: string; description?: string; version: number }) => adminApi.put<Application>(`/app/${id}`, data)
 export const deleteApp = (id: number, data: { version: number }) => adminApi.delete(`/app/${id}`, { data })
+export const getAppPrivileges = (id: number) =>
+  adminApi.get<{ name: string; privilege: number; grantor: string }[]>(`/app/${id}/privilege`)
+export const grantAppPrivilege = (id: number, data: { name: string; privilege: number }) =>
+  adminApi.post(`/app/${id}/privilege`, data)
 
 // Experiment
 export const createExp = (data: { app_id: number; app_ver: number; name: string; description?: string }) => adminApi.post<Experiment>('/exp', data)
@@ -47,7 +80,8 @@ export const deleteGroup = (id: number, data: { seg_id: number; seg_ver: number;
 // Config
 export const getConfigs = (grpId: number, begin?: number) => adminApi.get<Config[]>(`/grp/${grpId}/cfg`, { params: { begin } })
 export const createConfig = (grpId: number, content: string) => adminApi.post<{ id: number; stamp?: string }>(`/grp/${grpId}/cfg`, content)
-export const getConfig = (id: number) => adminApi.get<string>(`/cfg/${id}`, { responseType: 'text' })
+export const getConfig = (grpId: number, cfgId: number) =>
+  adminApi.get<string>(`/grp/${grpId}/cfg/${cfgId}`, { responseType: 'text' })
 
 // Engine
 export const verify = (data: { appid: number; key: string; context?: Record<string, string> }) => engineApi.post<{ config: Record<string, string>; tags: string[] }>('/', data)

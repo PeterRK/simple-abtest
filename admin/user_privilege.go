@@ -90,14 +90,14 @@ func prepareUserSql(db *sql.DB) (err error) {
 		return err
 	}
 	privSql.getListByApp, err = db.Prepare("SELECT " +
-		" t2.name AS `user`, t1.privilege, t3.name AS `grantor` " +
+		" t2.name AS `user`, t1.privilege, COALESCE(t3.name,'') AS `grantor` " +
 		"FROM " +
 		"( SELECT `uid`,`privilege`,`grant_by`,`update_time`" +
 		"  FROM `privilege` WHERE `app_id`=? ) t1 " +
 		"INNER JOIN " +
 		"( SELECT `uid`,`name` FROM `user` ) t2 " +
 		"ON t1.uid = t2.uid " +
-		"INNER JOIN " +
+		"LEFT JOIN " +
 		"( SELECT `uid`,`name` FROM `user` ) t3 " +
 		"ON t1.grant_by = t3.uid " +
 		"ORDER BY t1.update_time DESC")
@@ -165,11 +165,11 @@ const (
 )
 
 func makeSessionKey(uid uint32) string {
-	return fmt.Sprintf("%s:%d", sessionPrefix, uid)
+	return fmt.Sprintf("%s%d", sessionPrefix, uid)
 }
 
 func makePrivilegeKey(uid uint32) string {
-	return fmt.Sprintf("%s:%d", privilegePrefix, uid)
+	return fmt.Sprintf("%s%d", privilegePrefix, uid)
 }
 
 func hashPassword(password string, salt []byte) [32]byte {
@@ -182,7 +182,7 @@ func hashPassword(password string, salt []byte) [32]byte {
 }
 
 func issueSession(uid uint32) (string, error) {
-	raw := make([]byte, 32)
+	raw := make([]byte, 16)
 	if _, err := rand.Read(raw); err != nil {
 		return "", err
 	}
