@@ -10,32 +10,32 @@
       >
         <div class="group-title">{{ grp.name }} ({{ formatSharePercent(grp.share) }})</div>
         <div class="group-actions">
-          <el-button size="small" @click.stop="openRebalance(grp)" v-if="!grp.is_default">扩缩容</el-button>
-          <el-button size="small" type="danger" v-if="!grp.is_default && grp.share === 0" @click.stop="handleDelete(grp)">删除</el-button>
+          <el-button size="small" @click.stop="openRebalance(grp)" v-if="!grp.is_default">{{ t('group.rebalance') }}</el-button>
+          <el-button size="small" type="danger" v-if="!grp.is_default && grp.share === 0" @click.stop="handleDelete(grp)">{{ t('common.delete') }}</el-button>
         </div>
       </div>
     </div>
 
     <div class="group-footer">
-      <el-button size="small" type="primary" @click="openGroupDialog('create')">新增Group</el-button>
-      <el-button size="small" @click="handleShuffle">流量打散</el-button>
+      <el-button size="small" type="primary" @click="openGroupDialog('create')">{{ t('group.createGroup') }}</el-button>
+      <el-button size="small" @click="handleShuffle">{{ t('group.shuffle') }}</el-button>
     </div>
 
     <div v-if="selectedGroupDetail" class="group-detail">
       <div class="group-detail-header">
-        <el-input v-model="groupForm.name" placeholder="组名" />
-        <el-button type="primary" @click="handleUpdate">更新</el-button>
+        <el-input v-model="groupForm.name" :placeholder="t('group.groupName')" />
+        <el-button type="primary" @click="handleUpdate">{{ t('common.update') }}</el-button>
         <div class="group-detail-actions">
-          <el-button @click="handleSearchConfigs">配置查找</el-button>
+          <el-button @click="handleSearchConfigs">{{ t('group.searchConfig') }}</el-button>
           <div class="config-days-input">
             <el-input-number v-model="configDays" :min="0" :max="3650" size="small" />
-            <span>天前</span>
+            <span>{{ t('group.dayAgo') }}</span>
           </div>
         </div>
       </div>
       <div class="group-config-area">
-        <el-input v-model="forceHitText" type="textarea" :rows="8" placeholder="强制命中 key，每行一个" />
-        <el-input v-model="newConfigContent" type="textarea" :rows="8" placeholder="配置内容" />
+        <el-input v-model="forceHitText" type="textarea" :rows="8" :placeholder="t('group.forceHitPlaceholder')" />
+        <el-input v-model="newConfigContent" type="textarea" :rows="8" :placeholder="t('group.configPlaceholder')" />
         <div class="config-history">
           <el-table
             :data="displayConfigs"
@@ -47,34 +47,34 @@
             :row-class-name="configRowClassName"
             @current-change="handleSelectConfig"
           >
-            <el-table-column prop="id" label="配置ID" width="120" />
-            <el-table-column prop="stamp" label="更新时间" />
+            <el-table-column prop="id" :label="t('group.configId')" width="120" />
+            <el-table-column prop="stamp" :label="t('group.updateTime')" />
           </el-table>
         </div>
       </div>
     </div>
 
-    <el-dialog v-model="dialogVisible" title="新增Group" width="360px">
+    <el-dialog v-model="dialogVisible" :title="t('group.createTitle')" width="360px">
       <el-form :model="form" label-width="40px">
-        <el-form-item label="名称">
+        <el-form-item :label="t('common.name')">
           <el-input v-model="form.name" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleCreate">确定</el-button>
+        <el-button @click="dialogVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="handleCreate">{{ t('common.confirm') }}</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="rebalanceVisible" title="扩缩容" width="400px">
+    <el-dialog v-model="rebalanceVisible" :title="t('group.rebalanceTitle')" width="400px">
       <el-form>
-        <el-form-item label="流量百分比">
+        <el-form-item :label="t('layer.sharePercent')">
           <el-input-number v-model="rebalancePercent" :min="0" :max="100" :step="0.1" :precision="1" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="rebalanceVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleRebalance">确定</el-button>
+        <el-button @click="rebalanceVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="handleRebalance">{{ t('common.confirm') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -85,6 +85,7 @@ import { ref, computed, watch } from 'vue'
 import { createGrp, updateGrp, deleteGrp, rebalanceSeg, getGrpCfg, createGrpCfg, shuffleSeg, getGroup, getConfig } from '@/api'
 import type { Segment, Group, Config } from '@/api/types'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useI18n } from '@/i18n'
 
 const props = defineProps<{
   segment: Segment
@@ -102,6 +103,7 @@ const selectedConfigId = ref<number | null>(null)
 const configDays = ref(7)
 const configContentCache = new Map<number, string>()
 const configLoadInFlight = new Map<number, Promise<string>>()
+const { t } = useI18n()
 const buildForceHitList = (text: string) =>
   text
     .split('\n')
@@ -199,7 +201,7 @@ const handleCreate = async () => {
     if (!props.segment.group) props.segment.group = []
     props.segment.group.push(res.data)
     bumpSegmentVersion()
-    ElMessage.success('Group created')
+    ElMessage.success(t('message.groupCreated'))
     dialogVisible.value = false
   } catch (e) {
     // ignore
@@ -252,7 +254,7 @@ const handleUpdate = async () => {
         nextConfigId = currentConfigId ?? 0
       }
     }
-    ElMessage.success('Group updated')
+    ElMessage.success(t('message.groupUpdated'))
     const nextVersion = selectedGroupDetail.value.version + 1
     selectedGroupDetail.value = {
       ...selectedGroupDetail.value,
@@ -279,13 +281,13 @@ const handleUpdate = async () => {
       }
     }
   } catch (e) {
-    ElMessage.error('更新失败，请手动刷新后重试')
+    ElMessage.error(t('message.updateFailedRefresh'))
   }
 }
 
 const handleDelete = async (grp: Group) => {
     try {
-        await ElMessageBox.confirm('Delete this group?', 'Warning', { type: 'warning' })
+        await ElMessageBox.confirm(t('confirm.deleteGroup'), t('common.warning'), { type: 'warning' })
         await deleteGrp(grp.id, {
             seg_id: props.segment.id,
             seg_ver: props.segment.version!,
@@ -299,7 +301,7 @@ const handleDelete = async (grp: Group) => {
           resetGroupState()
         }
         bumpSegmentVersion()
-        ElMessage.success('Group deleted')
+        ElMessage.success(t('message.groupDeleted'))
     } catch (e) {
         // ignore
     }
@@ -308,7 +310,7 @@ const handleDelete = async (grp: Group) => {
 const handleShuffle = async () => {
   try {
     await shuffleSeg(props.segment.id)
-    ElMessage.success('Segment seed shuffled')
+    ElMessage.success(t('message.segmentSeedShuffled'))
   } catch (e) {
     // ignore
   }
@@ -325,14 +327,14 @@ const validateRebalance = (targetGroupId: number, nextShare: number) => {
   const target = list.find(item => item.id === targetGroupId)
   const defaultGroup = list.find(item => item.is_default)
   if (!target || !defaultGroup) {
-    return { valid: false, message: '未找到目标组或默认组，请刷新后重试' }
+    return { valid: false, message: t('message.missingTargetGroup') }
   }
   const minShare = Math.max(0, target.share + defaultGroup.share - 1000)
   const maxShare = Math.min(1000, target.share + defaultGroup.share)
   if (!Number.isFinite(nextShare) || nextShare < minShare || nextShare > maxShare) {
     return {
       valid: false,
-      message: `流量不合法，仅可在 ${formatSharePercent(minShare)} ~ ${formatSharePercent(maxShare)} 范围内调整`
+      message: t('message.invalidShareRange', { min: formatSharePercent(minShare), max: formatSharePercent(maxShare) })
     }
   }
   return { valid: true }
@@ -378,7 +380,7 @@ const handleRebalance = async () => {
             share: nextShare
         })
         applyLocalRebalance(rebalanceGroup.value.id, nextShare)
-        ElMessage.success('Share updated')
+        ElMessage.success(t('message.shareUpdated'))
         rebalanceVisible.value = false
     } catch (e) {
         // ignore

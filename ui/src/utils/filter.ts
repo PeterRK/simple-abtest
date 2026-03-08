@@ -102,12 +102,14 @@ export const DataTypes = {
   DtFloat: 3
 }
 
-export const OpOptions = [
-  { label: 'AND', value: 1 },
-  { label: 'OR', value: 2 },
-  { label: 'NOT', value: 3 },
-  { label: 'IN', value: 4 },
-  { label: 'NOT IN', value: 5 },
+type Translator = (key: string, params?: Record<string, string | number>) => string
+
+export const getOpOptions = (t: Translator) => [
+  { label: t('filter.opAnd'), value: 1 },
+  { label: t('filter.opOr'), value: 2 },
+  { label: t('filter.opNot'), value: 3 },
+  { label: t('filter.opIn'), value: 4 },
+  { label: t('filter.opNotIn'), value: 5 },
   { label: '=', value: 6 },
   { label: '!=', value: 7 },
   { label: '<', value: 8 },
@@ -116,23 +118,23 @@ export const OpOptions = [
   { label: '>=', value: 11 }
 ]
 
-export const DTypeOptions = [
-  { label: 'String', value: 1 },
-  { label: 'Int', value: 2 },
-  { label: 'Float', value: 3 }
+export const getDTypeOptions = (t: Translator) => [
+  { label: t('filter.dtypeString'), value: 1 },
+  { label: t('filter.dtypeInt'), value: 2 },
+  { label: t('filter.dtypeFloat'), value: 3 }
 ]
 
-export const validateExprNodes = (nodes: ExprNode[]): { valid: boolean; message?: string } => {
+export const validateExprNodes = (nodes: ExprNode[]): { valid: boolean; messageKey?: string } => {
   if (!nodes || nodes.length === 0) return { valid: true }
 
   const used = new Array(nodes.length).fill(false)
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes[i]
-    if (!node) return { valid: false, message: '表达式结构非法' }
+    if (!node) return { valid: false, messageKey: 'message.invalidExpr' }
     const children = node.child || []
     for (const index of children) {
       if (index <= 0 || index >= nodes.length || used[index]) {
-        return { valid: false, message: '表达式结构非法' }
+        return { valid: false, messageKey: 'message.invalidExpr' }
       }
       used[index] = true
     }
@@ -142,18 +144,18 @@ export const validateExprNodes = (nodes: ExprNode[]): { valid: boolean; message?
       case OpTypes.OpAnd:
       case OpTypes.OpOr:
         if (children.length < 2 || dtype !== DataTypes.DtNull) {
-          return { valid: false, message: '逻辑算子参数不合法' }
+          return { valid: false, messageKey: 'message.invalidLogicArgs' }
         }
         break
       case OpTypes.OpNot:
         if (children.length !== 1 || dtype !== DataTypes.DtNull) {
-          return { valid: false, message: '逻辑算子参数不合法' }
+          return { valid: false, messageKey: 'message.invalidLogicArgs' }
         }
         break
       case OpTypes.OpIn:
       case OpTypes.OpNotIn:
         if (children.length !== 0 || !node.key || dtype !== DataTypes.DtStr || !node.ss || node.ss.length === 0) {
-          return { valid: false, message: 'IN算子参数不合法' }
+          return { valid: false, messageKey: 'message.invalidInArgs' }
         }
         break
       case OpTypes.OpEqual:
@@ -163,11 +165,11 @@ export const validateExprNodes = (nodes: ExprNode[]): { valid: boolean; message?
       case OpTypes.OpGreatThan:
       case OpTypes.OpGreatOrEqual:
         if (children.length !== 0 || !node.key || (dtype !== DataTypes.DtStr && dtype !== DataTypes.DtInt && dtype !== DataTypes.DtFloat)) {
-          return { valid: false, message: '比较算子参数不合法' }
+          return { valid: false, messageKey: 'message.invalidCompareArgs' }
         }
         break
       default:
-        return { valid: false, message: '表达式结构非法' }
+        return { valid: false, messageKey: 'message.invalidExpr' }
     }
   }
 

@@ -4,6 +4,7 @@ import { getApps, createApp, updateApp, deleteApp, getApp, createExp, switchExp 
 import type { Application, Experiment } from '@/types'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from '@/i18n'
 
 const router = useRouter()
 const route = useRoute()
@@ -22,6 +23,7 @@ const currentApp = ref<Application | null>(null)
 const expDialogVisible = ref(false)
 const expForm = ref({ name: '', description: '' })
 const experimentStatusMap = ref(new Map<number, number>())
+const { t } = useI18n()
 
 const loadApps = async () => {
   try {
@@ -37,7 +39,7 @@ const loadApps = async () => {
     }
   } catch (e) {
     console.error(e)
-    ElMessage.error('Failed to load apps')
+    ElMessage.error(t('message.failedLoadApps'))
   }
 }
 
@@ -76,7 +78,7 @@ const loadExperiments = async () => {
     }
   } catch (e) {
     console.error(e)
-    ElMessage.error('Failed to load experiments')
+    ElMessage.error(t('message.failedLoadExperiments'))
   } finally {
     loading.value = false
   }
@@ -114,19 +116,19 @@ const handleCreateApp = async () => {
       description: created.description,
       experiment: created.experiment
     }
-    ElMessage.success('App created')
+    ElMessage.success(t('message.appCreated'))
     appDialogVisible.value = false
     await loadApps()
     await loadExperiments()
   } catch (e) {
-    ElMessage.error('Operation failed')
+    ElMessage.error(t('message.operationFailed'))
   }
 }
 
 const handleUpdateApp = async () => {
   if (!currentApp.value) return
   if (currentApp.value.version == null) {
-    ElMessage.error('App version is missing')
+    ElMessage.error(t('message.appVersionMissing'))
     return
   }
   if (
@@ -141,13 +143,13 @@ const handleUpdateApp = async () => {
       description: appForm.value.description,
       version: currentApp.value.version
     })
-    ElMessage.success('App updated')
+    ElMessage.success(t('message.appUpdated'))
     currentApp.value.name = appForm.value.name
     currentApp.value.description = appForm.value.description
     currentApp.value.version = currentApp.value.version + 1
     appDialogVisible.value = false
   } catch (e) {
-    ElMessage.error('Update failed')
+    ElMessage.error(t('message.updateFailed'))
   }
 }
 
@@ -155,18 +157,18 @@ const handleDeleteAppInDialog = async () => {
   const app = currentApp.value
   if (!app) return
   if (app.version == null) {
-    ElMessage.error('App version is missing')
+    ElMessage.error(t('message.appVersionMissing'))
     return
   }
   try {
-    await ElMessageBox.confirm('确定删除该应用？', '提示', { type: 'warning' })
+    await ElMessageBox.confirm(t('confirm.deleteApp'), t('common.warning'), { type: 'warning' })
     await deleteApp(app.id, { version: app.version })
-    ElMessage.success('App deleted')
+    ElMessage.success(t('message.appDeleted'))
     appDialogVisible.value = false
     selectedAppId.value = null
     loadApps()
   } catch (e) {
-    if (e !== 'cancel') ElMessage.error('Delete failed')
+    if (e !== 'cancel') ElMessage.error(t('message.deleteFailed'))
   }
 }
 
@@ -179,7 +181,7 @@ const handleExpSubmit = async () => {
   const app = apps.value.find(a => a.id === selectedAppId.value)
   if (!app) return
   if (app.version == null) {
-    ElMessage.error('App version is missing')
+    ElMessage.error(t('message.appVersionMissing'))
     return
   }
   try {
@@ -189,11 +191,11 @@ const handleExpSubmit = async () => {
       name: expForm.value.name,
       description: expForm.value.description
     })
-    ElMessage.success('Experiment created')
+    ElMessage.success(t('message.experimentCreated'))
     expDialogVisible.value = false
     loadExperiments()
   } catch (e) {
-    ElMessage.error('Create failed')
+    ElMessage.error(t('message.createFailed'))
   }
 }
 
@@ -207,11 +209,11 @@ const handleSwitchChange = async (val: number | boolean | string, row: Experimen
   if (previousStatus === newStatus) return
   try {
     await switchExp(row.id, { status: newStatus, version: row.version })
-    ElMessage.success('Status updated')
+    ElMessage.success(t('message.statusUpdated'))
     row.version = row.version + 1
     experimentStatusMap.value.set(row.id, newStatus)
   } catch (e) {
-    ElMessage.error('更新失败，请手动刷新后重试')
+    ElMessage.error(t('message.updateFailedRefresh'))
     row.status = row.status === 1 ? 0 : 1
   }
 }
@@ -243,24 +245,24 @@ watch(
   <div class="exp-list-page">
     <div class="toolbar">
       <div class="left">
-        <el-select v-model="selectedAppId" placeholder="Select App" @change="handleAppChange" style="width: 200px">
+        <el-select v-model="selectedAppId" :placeholder="t('list.selectApp')" @change="handleAppChange" style="width: 200px">
           <el-option v-for="app in apps" :key="app.id" :label="`${app.name} (${app.id})`" :value="app.id" />
         </el-select>
         <el-button-group class="ml-2">
-            <el-button @click="showCreateApp">新增</el-button>
-            <el-button :disabled="!selectedAppId" @click="showAppDetail">详情</el-button>
+            <el-button @click="showCreateApp">{{ t('common.create') }}</el-button>
+            <el-button :disabled="!selectedAppId" @click="showAppDetail">{{ t('common.detail') }}</el-button>
         </el-button-group>
       </div>
       <div class="right">
-        <el-button type="primary" :disabled="!selectedAppId" @click="showCreateExp">新增实验</el-button>
+        <el-button type="primary" :disabled="!selectedAppId" @click="showCreateExp">{{ t('list.createExperiment') }}</el-button>
       </div>
     </div>
 
     <el-table :data="experiments" style="width: 100%" v-loading="loading" @row-click="handleExpClick" row-class-name="clickable-row">
-      <el-table-column prop="id" label="ID" width="100" />
-      <el-table-column prop="name" label="Name" />
-      <el-table-column prop="description" label="Description" />
-      <el-table-column label="Status" width="100">
+      <el-table-column prop="id" :label="t('common.id')" width="100" />
+      <el-table-column prop="name" :label="t('common.name')" />
+      <el-table-column prop="description" :label="t('common.description')" />
+      <el-table-column :label="t('common.status')" width="100">
         <template #default="{ row }">
           <el-switch
             v-model="row.status"
@@ -274,43 +276,43 @@ watch(
     </el-table>
 
     <!-- App Dialog -->
-    <el-dialog v-model="appDialogVisible" :title="appDialogMode === 'create' ? '新增应用' : '应用详情'">
+    <el-dialog v-model="appDialogVisible" :title="appDialogMode === 'create' ? t('list.appCreateTitle') : t('list.appDetailTitle')">
       <el-form :model="appForm">
-        <el-form-item v-if="appDialogMode === 'detail' && currentApp" label="ID">
+        <el-form-item v-if="appDialogMode === 'detail' && currentApp" :label="t('common.id')">
           <span>{{ currentApp.id }}</span>
         </el-form-item>
-        <el-form-item label="名称">
+        <el-form-item :label="t('common.name')">
           <el-input v-model="appForm.name" />
         </el-form-item>
-        <el-form-item label="描述">
+        <el-form-item :label="t('common.description')">
           <el-input v-model="appForm.description" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="appDialogVisible = false">取消</el-button>
+        <el-button @click="appDialogVisible = false">{{ t('common.cancel') }}</el-button>
         <template v-if="appDialogMode === 'detail'">
-          <el-button type="primary" @click="handleUpdateApp">更新</el-button>
-          <el-button type="danger" @click="handleDeleteAppInDialog">删除</el-button>
+          <el-button type="primary" @click="handleUpdateApp">{{ t('common.update') }}</el-button>
+          <el-button type="danger" @click="handleDeleteAppInDialog">{{ t('common.delete') }}</el-button>
         </template>
         <template v-else>
-          <el-button type="primary" @click="handleCreateApp">确定</el-button>
+          <el-button type="primary" @click="handleCreateApp">{{ t('common.confirm') }}</el-button>
         </template>
       </template>
     </el-dialog>
 
     <!-- Exp Dialog -->
-    <el-dialog v-model="expDialogVisible" title="New Experiment">
+    <el-dialog v-model="expDialogVisible" :title="t('list.experimentCreateTitle')">
       <el-form :model="expForm">
-        <el-form-item label="Name">
+        <el-form-item :label="t('common.name')">
           <el-input v-model="expForm.name" />
         </el-form-item>
-        <el-form-item label="Description">
+        <el-form-item :label="t('common.description')">
           <el-input v-model="expForm.description" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="expDialogVisible = false">Cancel</el-button>
-        <el-button type="primary" @click="handleExpSubmit">Confirm</el-button>
+        <el-button @click="expDialogVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="handleExpSubmit">{{ t('common.confirm') }}</el-button>
       </template>
     </el-dialog>
   </div>

@@ -7,6 +7,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import LayerList from '@/components/traffic/LayerList.vue'
 import FilterEditor from '@/components/FilterEditor.vue'
 import { validateExprNodes } from '@/utils/filter'
+import { useI18n } from '@/i18n'
 
 const route = useRoute()
 const router = useRouter()
@@ -16,6 +17,7 @@ const loading = ref(false)
 const appInfo = ref<{ id: number; version: number } | null>(null)
 const layerListRef = ref<InstanceType<typeof LayerList> | null>(null)
 const expSnapshot = ref<{ name: string; description?: string; filter: string } | null>(null)
+const { t } = useI18n()
 
 const getFilterText = (filter?: Experiment['filter']) => JSON.stringify(filter || [])
 
@@ -34,7 +36,7 @@ const loadExp = async () => {
     experiment.value = res.data
     syncSnapshot(res.data)
   } catch (e) {
-    ElMessage.error('Failed to load experiment')
+    ElMessage.error(t('message.failedLoadExperiments'))
   } finally {
     loading.value = false
   }
@@ -52,7 +54,7 @@ const handleUpdate = async () => {
     }
     const validation = validateExprNodes(experiment.value.filter || [])
     if (!validation.valid) {
-      ElMessage.error(validation.message || '过滤条件不合法')
+      ElMessage.error(validation.messageKey ? t(validation.messageKey) : t('message.invalidFilter'))
       return
     }
     try {
@@ -62,11 +64,11 @@ const handleUpdate = async () => {
             version: experiment.value.version,
             filter: experiment.value.filter
         })
-        ElMessage.success('Experiment updated')
+        ElMessage.success(t('message.experimentUpdated'))
         experiment.value.version = experiment.value.version + 1
         syncSnapshot(experiment.value)
     } catch(e) {
-        ElMessage.error('更新失败，请手动刷新后重试')
+        ElMessage.error(t('message.updateFailedRefresh'))
     }
 }
 
@@ -74,9 +76,9 @@ const handleShuffle = async () => {
     if (!experiment.value) return
     try {
         await shuffleExp(experiment.value.id)
-        ElMessage.success('Shuffled')
+        ElMessage.success(t('message.shuffled'))
     } catch(e) {
-        ElMessage.error('Shuffle failed')
+        ElMessage.error(t('message.operationFailed'))
     }
 }
 
@@ -108,17 +110,17 @@ const handleDelete = async () => {
   if (!experiment.value) return
   await resolveAppInfo()
   if (!appInfo.value) {
-    ElMessage.error('无法获取应用信息')
+    ElMessage.error(t('message.appInfoMissing'))
     return
   }
   try {
-    await ElMessageBox.confirm('确认删除该实验？', '提示', { type: 'warning' })
+    await ElMessageBox.confirm(t('confirm.deleteExperiment'), t('common.warning'), { type: 'warning' })
     await deleteExp(experiment.value.id, {
       app_id: appInfo.value.id,
       app_ver: appInfo.value.version,
       version: experiment.value.version
     })
-    ElMessage.success('实验已删除')
+    ElMessage.success(t('message.experimentDeleted'))
     router.push({
       path: '/',
       query: {
@@ -127,7 +129,7 @@ const handleDelete = async () => {
       }
     })
   } catch (e) {
-    if (e !== 'cancel') ElMessage.error('删除失败')
+    if (e !== 'cancel') ElMessage.error(t('message.deleteFailed'))
   }
 }
 
@@ -140,17 +142,17 @@ onMounted(() => {
   <div class="exp-detail-page" v-if="experiment" v-loading="loading">
     <div class="exp-body">
       <div class="exp-row">
-        <el-input v-model="experiment.name" placeholder="实验名" />
-        <el-input v-model="experiment.description" placeholder="实验描述" />
-        <el-button type="primary" @click="handleUpdate">更新</el-button>
-        <el-button type="danger" @click="handleDelete">删除</el-button>
+        <el-input v-model="experiment.name" :placeholder="t('detail.expName')" />
+        <el-input v-model="experiment.description" :placeholder="t('detail.expDesc')" />
+        <el-button type="primary" @click="handleUpdate">{{ t('common.update') }}</el-button>
+        <el-button type="danger" @click="handleDelete">{{ t('common.delete') }}</el-button>
         <div class="exp-row-right">
-          <el-button @click="handleShuffle">流量打散</el-button>
-          <el-button type="primary" @click="handleCreateLayer">新增Layer</el-button>
+          <el-button @click="handleShuffle">{{ t('group.shuffle') }}</el-button>
+          <el-button type="primary" @click="handleCreateLayer">{{ t('detail.createLayer') }}</el-button>
         </div>
       </div>
       <div class="filter-section">
-        <div class="filter-title">过滤条件</div>
+        <div class="filter-title">{{ t('detail.filter') }}</div>
         <FilterEditor v-model="experiment.filter" />
       </div>
     </div>

@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { getApps, verify } from '@/api'
 import type { Application } from '@/types'
 import { ElMessage } from 'element-plus'
+import { useI18n } from '@/i18n'
 
 const apps = ref<Application[]>([])
 const form = ref({
@@ -11,19 +12,20 @@ const form = ref({
   contextStr: '{}'
 })
 const result = ref<any>(null)
+const { t } = useI18n()
 
 onMounted(async () => {
   try {
     const res = await getApps()
     apps.value = res.data
   } catch (e) {
-    ElMessage.error('Failed to load apps')
+    ElMessage.error(t('message.failedLoadApps'))
   }
 })
 
 const handleVerify = async () => {
   if (!form.value.appid || !form.value.key) {
-    ElMessage.warning('App ID and Key are required')
+    ElMessage.warning(t('message.verifyRequired'))
     return
   }
   try {
@@ -35,33 +37,33 @@ const handleVerify = async () => {
     })
     result.value = res.data
   } catch (e) {
-    ElMessage.error('Verification failed or invalid JSON')
+    ElMessage.error(t('message.verifyFailed'))
   }
 }
 </script>
 
 <template>
   <div class="verify-page">
-    <h2>Online Verify</h2>
+    <h2>{{ t('verify.title') }}</h2>
     <el-form :model="form" label-width="100px">
-      <el-form-item label="Application">
-        <el-select v-model="form.appid" placeholder="Select App">
+      <el-form-item :label="t('verify.application')">
+        <el-select v-model="form.appid" :placeholder="t('verify.selectApp')">
           <el-option v-for="app in apps" :key="app.id" :label="app.name" :value="app.id" />
         </el-select>
       </el-form-item>
-      <el-form-item label="Key">
-        <el-input v-model="form.key" placeholder="User ID or Device ID" />
+      <el-form-item :label="t('verify.key')">
+        <el-input v-model="form.key" :placeholder="t('verify.keyPlaceholder')" />
       </el-form-item>
-      <el-form-item label="Context">
-        <el-input v-model="form.contextStr" type="textarea" :rows="4" placeholder='JSON format, e.g. {"country": "US"}' />
+      <el-form-item :label="t('verify.context')">
+        <el-input v-model="form.contextStr" type="textarea" :rows="4" :placeholder="t('verify.contextPlaceholder')" />
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" @click="handleVerify">Verify</el-button>
+        <el-button type="primary" @click="handleVerify">{{ t('verify.button') }}</el-button>
       </el-form-item>
     </el-form>
 
     <div v-if="result" class="result-area">
-      <h3>Result</h3>
+      <h3>{{ t('verify.result') }}</h3>
       <pre>{{ JSON.stringify(result, null, 2) }}</pre>
     </div>
   </div>

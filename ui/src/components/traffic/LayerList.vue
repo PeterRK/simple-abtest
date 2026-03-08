@@ -3,16 +3,16 @@
     <el-collapse v-model="activeLayers">
       <el-collapse-item v-for="(layer, index) in layers" :key="layer.id" :name="layer.id">
         <template #title>
-          <span>{{ layer.name || `Layer${index + 1}` }}</span>
+          <span>{{ layer.name || t('layer.fallbackName', { index: index + 1 }) }}</span>
         </template>
         <div class="layer-body">
           <div class="layer-meta">
-            <el-input v-model="layer.name" placeholder="层名" />
-            <el-button size="small" type="primary" @click="handleUpdateLayer(layer)">改名</el-button>
-            <el-button size="small" type="danger" @click="handleDeleteLayer(layer)">删除</el-button>
+            <el-input v-model="layer.name" :placeholder="t('layer.namePlaceholder')" />
+            <el-button size="small" type="primary" @click="handleUpdateLayer(layer)">{{ t('layer.rename') }}</el-button>
+            <el-button size="small" type="danger" @click="handleDeleteLayer(layer)">{{ t('common.delete') }}</el-button>
             <div class="layer-meta-right">
-              <el-button size="small" type="primary" @click="handleAddSegment(layer)">新增Segment</el-button>
-              <el-button size="small" @click="openRebalanceDialog(layer)">调整Segment流量</el-button>
+              <el-button size="small" type="primary" @click="handleAddSegment(layer)">{{ t('layer.addSegment') }}</el-button>
+              <el-button size="small" @click="openRebalanceDialog(layer)">{{ t('layer.rebalanceSegment') }}</el-button>
             </div>
           </div>
           <SegmentList :layer="layer" />
@@ -20,40 +20,40 @@
       </el-collapse-item>
     </el-collapse>
 
-    <el-dialog v-model="dialogVisible" title="新增Layer" width="360px">
+    <el-dialog v-model="dialogVisible" :title="t('layer.createTitle')" width="360px">
       <el-form :model="form" label-width="40px">
-        <el-form-item label="名称">
+        <el-form-item :label="t('common.name')">
           <el-input v-model="form.name" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleCreate">确定</el-button>
+        <el-button @click="dialogVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="handleCreate">{{ t('common.confirm') }}</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="rebalanceVisible" title="调整Segment流量" width="60%">
+    <el-dialog v-model="rebalanceVisible" :title="t('layer.rebalanceTitle')" width="60%">
       <el-table :data="rebalanceSegments" size="small">
-        <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column label="Percent">
+        <el-table-column prop="id" :label="t('common.id')" width="80" />
+        <el-table-column :label="t('layer.percent')">
           <template #default="{ row, $index }">
             <el-input-number v-model="row.percent" :min="0" :max="100" size="small" @change="updateRanges($index)" />
           </template>
         </el-table-column>
-        <el-table-column label="Begin">
+        <el-table-column :label="t('layer.begin')">
           <template #default="{ row }">
             <span>{{ row.begin }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="End">
+        <el-table-column :label="t('layer.end')">
           <template #default="{ row }">
             <span>{{ row.end }}</span>
           </template>
         </el-table-column>
       </el-table>
       <template #footer>
-        <el-button @click="rebalanceVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleRebalance">确定</el-button>
+        <el-button @click="rebalanceVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="handleRebalance">{{ t('common.confirm') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -65,6 +65,7 @@ import { createLyr, updateLyr, deleteLyr, getLayer, createSeg, rebalanceLyr } fr
 import type { Experiment, Layer } from '@/api/types'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import SegmentList from './SegmentList.vue'
+import { useI18n } from '@/i18n'
 
 const props = defineProps<{
   experiment: Experiment | null
@@ -75,6 +76,7 @@ const layers = ref<Layer[]>([])
 const loadedLayerIds = ref(new Set<number>())
 const layerNameMap = ref(new Map<number, string>())
 const localLayerSyncing = ref(false)
+const { t } = useI18n()
 
 const dialogVisible = ref(false)
 const form = ref({ name: '' })
@@ -150,7 +152,7 @@ const handleCreate = async () => {
     layerNameMap.value.set(createdLayer.id, createdLayer.name)
     syncLayersToExperiment()
     bumpExperimentVersion()
-    ElMessage.success('Layer created')
+    ElMessage.success(t('message.layerCreated'))
     dialogVisible.value = false
   } catch (e) {
     // ignore
@@ -165,18 +167,18 @@ const handleUpdateLayer = async (layer: Layer) => {
       name: layer.name,
       version: layer.version
     })
-    ElMessage.success('Layer updated')
+    ElMessage.success(t('message.layerUpdated'))
     layer.version = layer.version + 1
     layerNameMap.value.set(layer.id, layer.name)
   } catch (e) {
-    ElMessage.error('更新失败，请手动刷新后重试')
+    ElMessage.error(t('message.updateFailedRefresh'))
   }
 }
 
 const handleDeleteLayer = async (layer: Layer) => {
     if (!props.experiment) return
     try {
-        await ElMessageBox.confirm('Delete this layer?', 'Warning', { type: 'warning' })
+        await ElMessageBox.confirm(t('confirm.deleteLayer'), t('common.warning'), { type: 'warning' })
         await deleteLyr(layer.id, {
             exp_id: props.experiment.id,
             exp_ver: props.experiment.version!,
@@ -188,7 +190,7 @@ const handleDeleteLayer = async (layer: Layer) => {
         layerNameMap.value.delete(layer.id)
         syncLayersToExperiment()
         bumpExperimentVersion()
-        ElMessage.success('Layer deleted')
+        ElMessage.success(t('message.layerDeleted'))
     } catch (e) {
         // ignore
     }
@@ -210,7 +212,7 @@ const handleAddSegment = async (layer: Layer) => {
     layerNameMap.value.set(nextLayer.id, nextLayer.name)
     syncLayersToExperiment()
     bumpExperimentVersion()
-    ElMessage.success('Segment created')
+    ElMessage.success(t('message.segmentCreated'))
   } catch (e) {
     // ignore
   }
@@ -259,14 +261,14 @@ const handleRebalance = async () => {
   try {
     const total = rebalanceSegments.value.reduce((sum, item) => sum + (item?.percent || 0), 0)
     if (total !== 100) {
-      ElMessage.error('流量百分比总和需为100')
+      ElMessage.error(t('message.sumShareMust100'))
       return
     }
     await rebalanceLyr(rebalanceLayer.value.id, {
       version: rebalanceLayer.value.version!,
       segment: rebalanceSegments.value
     })
-    ElMessage.success('Segments rebalanced')
+    ElMessage.success(t('message.segmentsRebalanced'))
     const currentSegments = rebalanceLayer.value.segment || []
     const versionMap = new Map(currentSegments.map(seg => [seg.id, seg.version]))
     const nextSegments = rebalanceSegments.value.map(item => ({
@@ -284,7 +286,7 @@ const handleRebalance = async () => {
     )
     rebalanceVisible.value = false
   } catch (e) {
-    ElMessage.error('调整失败，请手动刷新后重试')
+    ElMessage.error(t('message.rebalanceFailedRefresh'))
   }
 }
 

@@ -16,7 +16,7 @@
             :disabled="seg.begin !== seg.end"
             @click.stop="handleDelete(seg)"
           >
-            删除
+            {{ t('common.delete') }}
           </el-button>
         </div>
       </div>
@@ -34,6 +34,7 @@ import { deleteSeg, getSegment } from '@/api'
 import type { Layer, Segment } from '@/api/types'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import GroupList from './GroupList.vue'
+import { useI18n } from '@/i18n'
 
 const props = defineProps<{
   layer: Layer
@@ -42,13 +43,14 @@ const props = defineProps<{
 const segmentDetails = ref<Record<number, Segment>>({})
 const segments = computed(() => props.layer.segment || [])
 const selectedSegmentId = ref<number | null>(null)
+const { t } = useI18n()
 const selectedSegmentDetail = computed(() =>
   selectedSegmentId.value != null ? segmentDetails.value[selectedSegmentId.value] || null : null
 )
 
 const handleDelete = async (seg: Segment) => {
     try {
-        await ElMessageBox.confirm('Delete this segment? Range must be empty.', 'Warning', { type: 'warning' })
+        await ElMessageBox.confirm(t('confirm.deleteSegment'), t('common.warning'), { type: 'warning' })
         await deleteSeg(seg.id, {
             lyr_id: props.layer.id,
             lyr_ver: props.layer.version!,
@@ -64,7 +66,7 @@ const handleDelete = async (seg: Segment) => {
         const nextDetails = { ...segmentDetails.value }
         delete nextDetails[seg.id]
         segmentDetails.value = nextDetails
-        ElMessage.success('Segment deleted')
+        ElMessage.success(t('message.segmentDeleted'))
     } catch (e) {
         // ignore
     }

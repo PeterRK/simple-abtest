@@ -4,8 +4,8 @@
       <FilterNode :node="root" :indent="0" @remove="handleRootRemove" />
     </div>
     <div v-else class="empty-state">
-      <span class="empty-text">无过滤条件</span>
-      <el-button size="small" @click="createRoot">新增根算子</el-button>
+      <span class="empty-text">{{ t('filter.empty') }}</span>
+      <el-button size="small" @click="createRoot">{{ t('filter.addRoot') }}</el-button>
     </div>
   </div>
 </template>
@@ -14,6 +14,7 @@
 import { ref, watch } from 'vue'
 import FilterNode from './FilterNode.vue'
 import { flatToTree, treeToFlat, type ExprNode, type TreeNode } from '@/utils/filter'
+import { useI18n } from '@/i18n'
 
 const props = defineProps<{
   modelValue: ExprNode[] | undefined
@@ -22,6 +23,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:modelValue', val: ExprNode[]): void
 }>()
+
+const { t } = useI18n()
 
 const root = ref<TreeNode | null>(null)
 
