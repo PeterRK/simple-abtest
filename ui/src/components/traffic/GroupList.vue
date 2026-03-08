@@ -100,6 +100,8 @@ const currentConfigContent = ref('')
 const configHistory = ref<Config[]>([])
 const selectedConfigId = ref<number | null>(null)
 const configDays = ref(7)
+const configContentCache = new Map<number, string>()
+const configLoadInFlight = new Map<number, Promise<string>>()
 const buildForceHitList = (text: string) =>
   text
     .split('\n')
@@ -122,6 +124,8 @@ const resetGroupState = () => {
   currentConfigContent.value = ''
   configHistory.value = []
   selectedConfigId.value = null
+  configContentCache.clear()
+  configLoadInFlight.clear()
 }
 
 const loadGroupDetail = async (grpId: number) => {
@@ -134,6 +138,11 @@ const loadGroupDetail = async (grpId: number) => {
     currentConfigContent.value = res.data.config || ''
     selectedConfigId.value = res.data.cfg_id ?? null
     configHistory.value = res.data.cfg_id ? [{ id: res.data.cfg_id, stamp: res.data.cfg_stamp }] : []
+    configContentCache.clear()
+    configLoadInFlight.clear()
+    if (res.data.cfg_id != null && res.data.cfg_id > 0) {
+      configContentCache.set(res.data.cfg_id, res.data.config || '')
+    }
   } catch (e) {
     selectedGroupDetail.value = null
   }
@@ -212,6 +221,7 @@ const handleUpdate = async () => {
     let nextConfigId = activeConfigId
     let nextConfigContent = currentConfigContent.value
     let createdConfigId: number | null = null
+    let createdConfigStamp = ''
     if (activeConfigId !== currentConfigId) {
       await updateGrp(selectedGroupDetail.value.id, {
         name: groupForm.value.name,
@@ -223,6 +233,7 @@ const handleUpdate = async () => {
       if (hasContentChange) {
         const res = await createGrpCfg(selectedGroupDetail.value.id, newConfigContent.value)
         createdConfigId = res.data.id
+        createdConfigStamp = res.data.stamp || ''
         nextConfigId = res.data.id
         nextConfigContent = newConfigContent.value
         await updateGrp(selectedGroupDetail.value.id, {
@@ -247,14 +258,16 @@ const handleUpdate = async () => {
       ...selectedGroupDetail.value,
       name: groupForm.value.name,
       cfg_id: nextConfigId,
+      cfg_stamp: createdConfigId != null ? createdConfigStamp : selectedGroupDetail.value.cfg_stamp,
       force_hit: forceHit,
       version: nextVersion,
       config: nextConfigContent
     }
     currentConfigContent.value = nextConfigContent
     selectedConfigId.value = nextConfigId
-    if (createdConfigId != null && !configHistory.value.some(item => item.id === createdConfigId)) {
-      configHistory.value = [{ id: createdConfigId }, ...configHistory.value]
+    configContentCache.set(nextConfigId, nextConfigContent)
+    if (createdConfigId != null) {
+      configHistory.value = [{ id: createdConfigId, stamp: createdConfigStamp }]
     }
     if (props.segment.group) {
       const target = props.segment.group.find(item => item.id === selectedGroupDetail.value?.id)
@@ -415,12 +428,30 @@ const normalizeConfigContent = (content: unknown) => {
 
 const handleSelectConfig = async (cfg: Config | null) => {
   if (!cfg) return
-  selectedConfigId.value = cfg.id
+  const cfgId = cfg.id
+  selectedConfigId.value = cfgId
+  const cached = configContentCache.get(cfgId)
+  if (cached !== undefined) {
+    newConfigContent.value = cached
+    return
+  }
+  let pending = configLoadInFlight.get(cfgId)
+  if (!pending) {
+    pending = getConfig(cfgId).then(res => normalizeConfigContent(res.data))
+    configLoadInFlight.set(cfgId, pending)
+  }
   try {
-    const res = await getConfig(cfg.id)
-    newConfigContent.value = normalizeConfigContent(res.data)
+    const content = await pending
+    configContentCache.set(cfgId, content)
+    if (selectedConfigId.value === cfgId) {
+      newConfigContent.value = content
+    }
   } catch (e) {
     // ignore
+  } finally {
+    if (configLoadInFlight.get(cfgId) === pending) {
+      configLoadInFlight.delete(cfgId)
+    }
   }
 }
 

@@ -394,6 +394,7 @@ func cfgGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
+	logger.Debugf("get config by id: %d", id)
 	w.Write(utils.UnsafeStringToBytes(content))
 }
 

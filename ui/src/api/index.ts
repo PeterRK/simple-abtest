@@ -46,7 +46,7 @@ export const deleteGroup = (id: number, data: { seg_id: number; seg_ver: number;
 
 // Config
 export const getConfigs = (grpId: number, begin?: number) => adminApi.get<Config[]>(`/grp/${grpId}/cfg`, { params: { begin } })
-export const createConfig = (grpId: number, content: string) => adminApi.post<{ id: number }>(`/grp/${grpId}/cfg`, content)
+export const createConfig = (grpId: number, content: string) => adminApi.post<{ id: number; stamp?: string }>(`/grp/${grpId}/cfg`, content)
 export const getConfig = (id: number) => adminApi.get<string>(`/cfg/${id}`, { responseType: 'text' })
 
 // Engine
