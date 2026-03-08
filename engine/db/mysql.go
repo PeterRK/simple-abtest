@@ -74,7 +74,7 @@ func CreateMySQLSource(config string) (Source, error) {
 	}
 
 	s.stmts.getGroup, err = s.client.Prepare(
-		"SELECT `grp_id`,`seg_id`,`name`,`bitmap`,`force_hit`," +
+		"SELECT `grp_id`,t3.seg_id,`name`,`bitmap`,`force_hit`," +
 			"COALESCE(`content`,'') AS `content` FROM " +
 			"( SELECT `exp_id` FROM `experiment` WHERE `status`=1 ) t1 " +
 			"INNER JOIN " +
