@@ -36,7 +36,7 @@ type segDetail struct {
 func prepareSegSql(db *sql.DB) (err error) {
 	segSql.getList, err = db.Prepare(
 		"SELECT `seg_id`,`range_begin`,`range_end` FROM `exp_segment` " +
-			"WHERE `lyr_id`=?")
+			"WHERE `lyr_id`=? ORDER BY `seg_id` ASC")
 	if err != nil {
 		return err
 	}
@@ -140,6 +140,11 @@ func segGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 			return
 		}
 		resp.Group = append(resp.Group, grp)
+	}
+	if err := rows.Err(); err != nil {
+		logger.Errorf("fail to iterate sql[grp.getList]: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
 	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)

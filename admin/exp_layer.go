@@ -22,7 +22,7 @@ var lyrSql struct {
 
 func prepareLyrSql(db *sql.DB) (err error) {
 	lyrSql.getList, err = db.Prepare(
-		"SELECT `lyr_id`,`name` FROM `exp_layer` WHERE `exp_id`=?")
+		"SELECT `lyr_id`,`name` FROM `exp_layer` WHERE `exp_id`=? ORDER BY `lyr_id` ASC")
 	if err != nil {
 		return err
 	}
@@ -129,6 +129,11 @@ func lyrGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 			return
 		}
 		resp.Segment = append(resp.Segment, seg)
+	}
+	if err := rows.Err(); err != nil {
+		logger.Errorf("fail to iterate sql[seg.getList]: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
 	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
@@ -327,6 +332,11 @@ func lyrRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 			return
 		}
 		cnt++
+	}
+	if err := rows.Err(); err != nil {
+		logger.Errorf("fail to iterate sql[seg.getList]: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 	if cnt != len(req.Segment) {
 		w.WriteHeader(http.StatusConflict)

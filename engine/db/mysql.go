@@ -47,7 +47,7 @@ func CreateMySQLSource(config string) (Source, error) {
 
 	s.stmts.getExperiment, err = s.client.Prepare(
 		"SELECT `exp_id`,`app_id`,`seed`,`filter` FROM `experiment` " +
-			"WHERE `status` = 1")
+			"WHERE `status` = 1 ORDER BY `exp_id` ASC")
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +56,7 @@ func CreateMySQLSource(config string) (Source, error) {
 		"( SELECT `exp_id` FROM `experiment` WHERE `status`=1 ) t1 " +
 		"INNER JOIN " +
 		"( SELECT `lyr_id`,`exp_id`,`name` FROM `exp_layer` ) t2 " +
-		"ON t1.exp_id = t2.exp_id")
+		"ON t1.exp_id = t2.exp_id ORDER BY t2.`lyr_id` ASC")
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +68,7 @@ func CreateMySQLSource(config string) (Source, error) {
 		"ON t1.exp_id = t2.exp_id " +
 		"INNER JOIN " +
 		"( SELECT `seg_id`,`lyr_id`,`range_begin`,`range_end`,`seed` FROM `exp_segment` ) t3 " +
-		"ON t2.lyr_id = t3.lyr_id")
+		"ON t2.lyr_id = t3.lyr_id ORDER BY t3.`seg_id` ASC")
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func CreateMySQLSource(config string) (Source, error) {
 			"ON t3.seg_id = t4.seg_id " +
 			"LEFT JOIN " +
 			"( SELECT `cfg_id`,`content` FROM `exp_config` ) t5 " +
-			"ON t4.cfg_id = t5.cfg_id")
+			"ON t4.cfg_id = t5.cfg_id ORDER BY t4.`grp_id` ASC")
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +143,7 @@ func (s *mysqlSource) getExperiment(tx *sql.Tx, apps map[uint32][]uint32, exps m
 		apps[appId] = append(apps[appId], expId)
 		exps[expId] = exp
 	}
-	return nil
+	return rows.Err()
 }
 
 func (s *mysqlSource) getLayer(tx *sql.Tx, exps map[uint32]*experiment, lyrs map[uint32]*layer) error {
@@ -167,7 +167,7 @@ func (s *mysqlSource) getLayer(tx *sql.Tx, exps map[uint32]*experiment, lyrs map
 		exp.layers = append(exp.layers, lyrId)
 		lyrs[lyrId] = lyr
 	}
-	return nil
+	return rows.Err()
 }
 
 func (s *mysqlSource) getSegment(tx *sql.Tx, lyrs map[uint32]*layer, segs map[uint32]*segment) error {
@@ -191,7 +191,7 @@ func (s *mysqlSource) getSegment(tx *sql.Tx, lyrs map[uint32]*layer, segs map[ui
 		lyr.segments = append(lyr.segments, segId)
 		segs[segId] = seg
 	}
-	return nil
+	return rows.Err()
 }
 
 func (s *mysqlSource) getGroup(tx *sql.Tx, segs map[uint32]*segment, grps map[uint32]*group) error {
@@ -223,7 +223,7 @@ func (s *mysqlSource) getGroup(tx *sql.Tx, segs map[uint32]*segment, grps map[ui
 		}
 		grps[grpId] = grp
 	}
-	return nil
+	return rows.Err()
 }
 
 func (s *mysqlSource) Fetch(ctx context.Context) (map[uint32][]core.Experiment, error) {

@@ -22,7 +22,7 @@ var appSql struct {
 
 func prepareAppSql(db *sql.DB) (err error) {
 	appSql.getList, err = db.Prepare(
-		"SELECT `app_id`,`name` FROM `application`")
+		"SELECT `app_id`,`name` FROM `application` ORDER BY `app_id` ASC")
 	if err != nil {
 		return err
 	}
@@ -97,6 +97,11 @@ func appGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		}
 		resp = append(resp, rec)
 	}
+	if err := rows.Err(); err != nil {
+		logger.Errorf("fail to iterate sql[app.getList]: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, &resp)
 }
 
@@ -154,6 +159,11 @@ func appGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 			return
 		}
 		resp.Experiment = append(resp.Experiment, exp)
+	}
+	if err := rows.Err(); err != nil {
+		logger.Errorf("fail to iterate sql[exp.getList]: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
 	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)

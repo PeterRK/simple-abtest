@@ -56,7 +56,7 @@ type cfgSummary struct {
 func prepareGrpSql(db *sql.DB) (err error) {
 	grpSql.getList, err = db.Prepare(
 		"SELECT `grp_id`,`name`,`share`,`is_default` FROM `exp_group` " +
-			"WHERE `seg_id`=?")
+			"WHERE `seg_id`=? ORDER BY `grp_id` ASC")
 	if err != nil {
 		return err
 	}
@@ -110,7 +110,7 @@ func prepareGrpSql(db *sql.DB) (err error) {
 
 	cfgSql.getList, err = db.Prepare(
 		"SELECT `cfg_id`,`create_time` FROM `exp_config` " +
-			"WHERE `grp_id`=? AND create_time>=?")
+			"WHERE `grp_id`=? AND create_time>=? ORDER BY `cfg_id` ASC")
 	if err != nil {
 		return err
 	}
@@ -360,6 +360,11 @@ func cfgGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 			Id:    id,
 			Stamp: stamp.Format(time.DateTime),
 		})
+	}
+	if err := rows.Err(); err != nil {
+		logger.Errorf("fail to iterate sql[cfg.getList]: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, &resp)
 }

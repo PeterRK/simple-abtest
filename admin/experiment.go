@@ -34,7 +34,7 @@ func prepareExpSql(db *sql.DB) (err error) {
 	}
 	expSql.getList, err = db.Prepare(
 		"SELECT `exp_id`,`name`,`description`,`status`,`version` FROM `experiment` " +
-			"WHERE `app_id`=?")
+			"WHERE `app_id`=? ORDER BY `exp_id` ASC")
 	if err != nil {
 		return err
 	}
@@ -166,6 +166,11 @@ func expGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 			return
 		}
 		resp.Layer = append(resp.Layer, lyr)
+	}
+	if err := rows.Err(); err != nil {
+		logger.Errorf("fail to iterate sql[lyr.getList]: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
 }
