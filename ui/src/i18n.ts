@@ -9,8 +9,8 @@ export type Locale = 'zh-CN' | 'en-US'
 const messages: Record<Locale, MessageTree> = {
   'zh-CN': {
     app: {
-      title: 'AB 测试平台',
-      experiments: '实验',
+      title: 'AB测试平台',
+      experiments: '实验信息',
       verify: '在线验证',
       language: '语言',
       langZh: '中文',

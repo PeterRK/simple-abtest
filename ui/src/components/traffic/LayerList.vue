@@ -107,17 +107,29 @@ const loadLayers = () => {
     layers.value = []
     loadedLayerIds.value = new Set()
     layerNameMap.value = new Map()
+    activeLayers.value = []
     return
   }
+  const currentActiveSet = new Set(activeLayers.value)
   layers.value = props.experiment.layer.map(layer => ({
     ...layer,
     segment: (layer.segment || []).map(seg => ({ ...seg }))
   }))
+  const validLayerIds = new Set(layers.value.map(layer => layer.id))
+  const nextActive = activeLayers.value.filter(layerId => validLayerIds.has(layerId))
+  if (layers.value.length === 1 && nextActive.length === 0) {
+    const onlyLayer = layers.value[0]
+    if (onlyLayer) nextActive.push(onlyLayer.id)
+  }
+  activeLayers.value = nextActive
   const map = new Map<number, string>()
   for (const layer of layers.value) {
     map.set(layer.id, layer.name)
   }
   layerNameMap.value = map
+  loadedLayerIds.value = new Set(
+    Array.from(currentActiveSet).filter(layerId => validLayerIds.has(layerId))
+  )
 }
 
 const updateLayerDetail = (detail: Layer) => {

@@ -48,6 +48,26 @@ const selectedSegmentDetail = computed(() =>
   selectedSegmentId.value != null ? segmentDetails.value[selectedSegmentId.value] || null : null
 )
 
+const selectSegment = (seg: Segment) => {
+  selectedSegmentId.value = seg.id
+  if (!segmentDetails.value[seg.id]) {
+    getSegment(seg.id)
+      .then(res => {
+        segmentDetails.value = { ...segmentDetails.value, [seg.id]: res.data }
+      })
+      .catch(() => {
+        // ignore
+      })
+  }
+}
+
+const autoSelectSingleSegment = () => {
+  if (segments.value.length !== 1) return
+  const onlySegment = segments.value[0]
+  if (!onlySegment) return
+  selectSegment(onlySegment)
+}
+
 const handleDelete = async (seg: Segment) => {
     try {
         await ElMessageBox.confirm(t('confirm.deleteSegment'), t('common.warning'), { type: 'warning' })
@@ -79,6 +99,7 @@ watch(
       selectedSegmentId.value = null
     }
     segmentDetails.value = {}
+    autoSelectSingleSegment()
   },
   { deep: true, immediate: true }
 )
@@ -87,20 +108,9 @@ watch(
   () => {
     selectedSegmentId.value = null
     segmentDetails.value = {}
+    autoSelectSingleSegment()
   }
 )
-const selectSegment = (seg: Segment) => {
-  selectedSegmentId.value = seg.id
-  if (!segmentDetails.value[seg.id]) {
-    getSegment(seg.id)
-      .then(res => {
-        segmentDetails.value = { ...segmentDetails.value, [seg.id]: res.data }
-      })
-      .catch(() => {
-        // ignore
-      })
-  }
-}
 </script>
 
 <style scoped>

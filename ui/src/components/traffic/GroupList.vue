@@ -213,12 +213,13 @@ const handleUpdate = async () => {
   try {
     const forceHit = buildForceHitList(forceHitText.value)
     const currentConfigId = selectedGroupDetail.value.cfg_id
-    const activeConfigId = selectedConfigId.value ?? currentConfigId
-    if (activeConfigId == null) return
+    const activeConfigId = selectedConfigId.value ?? currentConfigId ?? 0
     const hasNameChange = selectedGroupDetail.value.name !== groupForm.value.name
     const hasForceHitChange = !isSameList(selectedGroupDetail.value.force_hit || [], forceHit)
     const hasConfigChange = activeConfigId !== currentConfigId
-    const hasContentChange = newConfigContent.value !== currentConfigContent.value
+    const nextContent = newConfigContent.value || ''
+    const currentContent = currentConfigContent.value || ''
+    const hasContentChange = nextContent !== currentContent
     if (!hasNameChange && !hasForceHitChange && !hasConfigChange && !hasContentChange) return
     let nextConfigId = activeConfigId
     let nextConfigContent = currentConfigContent.value
