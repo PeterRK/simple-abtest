@@ -15,7 +15,7 @@
               <el-button size="small" @click="openRebalanceDialog(layer)">调整Segment流量</el-button>
             </div>
           </div>
-          <SegmentList :layer="layer" @refresh="$emit('refresh')" />
+          <SegmentList :layer="layer" />
         </div>
       </el-collapse-item>
     </el-collapse>
@@ -70,12 +70,11 @@ const props = defineProps<{
   experiment: Experiment | null
 }>()
 
-const emit = defineEmits(['refresh'])
-
 const activeLayers = ref<number[]>([])
 const layers = ref<Layer[]>([])
 const loadedLayerIds = ref(new Set<number>())
 const layerNameMap = ref(new Map<number, string>())
+const localLayerSyncing = ref(false)
 
 const dialogVisible = ref(false)
 const form = ref({ name: '' })
@@ -83,6 +82,18 @@ const form = ref({ name: '' })
 const openLayerDialog = () => {
   form.value = { name: '' }
   dialogVisible.value = true
+}
+
+const bumpExperimentVersion = () => {
+  if (props.experiment && typeof props.experiment.version === 'number') {
+    props.experiment.version += 1
+  }
+}
+
+const syncLayersToExperiment = () => {
+  if (!props.experiment) return
+  localLayerSyncing.value = true
+  props.experiment.layer = layers.value.map(layer => ({ ...layer }))
 }
 
 defineExpose({
@@ -97,11 +108,8 @@ const loadLayers = () => {
     return
   }
   layers.value = props.experiment.layer.map(layer => ({
-    id: layer.id,
-    name: layer.name,
-    version: layer.version,
-    exp_id: layer.exp_id,
-    exp_ver: layer.exp_ver
+    ...layer,
+    segment: (layer.segment || []).map(seg => ({ ...seg }))
   }))
   const map = new Map<number, string>()
   for (const layer of layers.value) {
@@ -129,14 +137,21 @@ const fetchLayerDetail = async (layerId: number, force = false) => {
 const handleCreate = async () => {
   if (!props.experiment) return
   try {
-    await createLyr({
+    const res = await createLyr({
       exp_id: props.experiment.id,
       exp_ver: props.experiment.version!,
       name: form.value.name
     })
+    const createdLayer: Layer = {
+      ...res.data,
+      segment: res.data.segment || []
+    }
+    layers.value = [...layers.value, createdLayer]
+    layerNameMap.value.set(createdLayer.id, createdLayer.name)
+    syncLayersToExperiment()
+    bumpExperimentVersion()
     ElMessage.success('Layer created')
     dialogVisible.value = false
-    emit('refresh')
   } catch (e) {
     // ignore
   }
@@ -167,8 +182,13 @@ const handleDeleteLayer = async (layer: Layer) => {
             exp_ver: props.experiment.version!,
             version: layer.version!
         })
+        layers.value = layers.value.filter(item => item.id !== layer.id)
+        activeLayers.value = activeLayers.value.filter(id => id !== layer.id)
+        loadedLayerIds.value.delete(layer.id)
+        layerNameMap.value.delete(layer.id)
+        syncLayersToExperiment()
+        bumpExperimentVersion()
         ElMessage.success('Layer deleted')
-        emit('refresh')
     } catch (e) {
         // ignore
     }
@@ -176,12 +196,21 @@ const handleDeleteLayer = async (layer: Layer) => {
 
 const handleAddSegment = async (layer: Layer) => {
   try {
-    await createSeg({
+    const res = await createSeg({
       lyr_id: layer.id,
       lyr_ver: layer.version!
     })
+    const nextSegments = [...(layer.segment || []), res.data]
+    const nextLayer = {
+      ...layer,
+      segment: nextSegments,
+      version: layer.version + 1
+    }
+    layers.value = layers.value.map(item => (item.id === layer.id ? nextLayer : item))
+    layerNameMap.value.set(nextLayer.id, nextLayer.name)
+    syncLayersToExperiment()
+    bumpExperimentVersion()
     ElMessage.success('Segment created')
-    await fetchLayerDetail(layer.id, true)
   } catch (e) {
     // ignore
   }
@@ -262,6 +291,10 @@ const handleRebalance = async () => {
 watch(
   () => props.experiment?.layer,
   () => {
+    if (localLayerSyncing.value) {
+      localLayerSyncing.value = false
+      return
+    }
     loadLayers()
     loadedLayerIds.value = new Set()
     for (const layerId of activeLayers.value) {

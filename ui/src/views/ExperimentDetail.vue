@@ -119,7 +119,13 @@ const handleDelete = async () => {
       version: experiment.value.version
     })
     ElMessage.success('实验已删除')
-    router.push('/')
+    router.push({
+      path: '/',
+      query: {
+        app_id: String(appInfo.value.id),
+        refresh: String(Date.now())
+      }
+    })
   } catch (e) {
     if (e !== 'cancel') ElMessage.error('删除失败')
   }
@@ -150,7 +156,7 @@ onMounted(() => {
     </div>
 
     <div class="section">
-      <LayerList ref="layerListRef" :experiment="experiment" @refresh="loadExp" />
+      <LayerList ref="layerListRef" :experiment="experiment" />
     </div>
   </div>
 </template>

@@ -8,7 +8,7 @@
         :class="{ active: selectedGroupId === grp.id }"
         @click="selectGroup(grp)"
       >
-        <div class="group-title">{{ grp.name }} ({{ grp.share }}‰)</div>
+        <div class="group-title">{{ grp.name }} ({{ formatSharePercent(grp.share) }})</div>
         <div class="group-actions">
           <el-button size="small" @click.stop="openRebalance(grp)" v-if="!grp.is_default">扩缩容</el-button>
           <el-button size="small" type="danger" v-if="!grp.is_default && grp.share === 0" @click.stop="handleDelete(grp)">删除</el-button>
@@ -68,8 +68,8 @@
 
     <el-dialog v-model="rebalanceVisible" title="扩缩容" width="400px">
       <el-form>
-        <el-form-item label="流量千分比">
-          <el-input-number v-model="rebalanceShare" :min="0" :max="1000" />
+        <el-form-item label="流量百分比">
+          <el-input-number v-model="rebalancePercent" :min="0" :max="100" :step="0.1" :precision="1" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -89,8 +89,6 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 const props = defineProps<{
   segment: Segment
 }>()
-
-const emit = defineEmits(['refresh'])
 
 const groups = computed(() => props.segment.group || [])
 const selectedGroupId = ref<number | null>(null)
@@ -176,16 +174,24 @@ const openGroupDialog = (type: 'create') => {
   }
 }
 
+const bumpSegmentVersion = () => {
+  if (typeof props.segment.version === 'number') {
+    props.segment.version += 1
+  }
+}
+
 const handleCreate = async () => {
   try {
-    await createGrp({
+    const res = await createGrp({
       seg_id: props.segment.id,
       seg_ver: props.segment.version!,
       name: form.value.name
     })
+    if (!props.segment.group) props.segment.group = []
+    props.segment.group.push(res.data)
+    bumpSegmentVersion()
     ElMessage.success('Group created')
     dialogVisible.value = false
-    emit('refresh')
   } catch (e) {
     // ignore
   }
@@ -272,8 +278,15 @@ const handleDelete = async (grp: Group) => {
             seg_ver: props.segment.version!,
             version: grp.version
         })
+        if (props.segment.group) {
+          props.segment.group = props.segment.group.filter(item => item.id !== grp.id)
+        }
+        if (selectedGroupId.value === grp.id) {
+          selectedGroupId.value = null
+          resetGroupState()
+        }
+        bumpSegmentVersion()
         ElMessage.success('Group deleted')
-        emit('refresh')
     } catch (e) {
         // ignore
     }
@@ -290,26 +303,70 @@ const handleShuffle = async () => {
 
 // Rebalance
 const rebalanceVisible = ref(false)
-const rebalanceShare = ref(0)
+const rebalancePercent = ref(0)
 const rebalanceGroup = ref<Group | null>(null)
+const formatSharePercent = (share: number) => `${(share / 10).toFixed(1)}%`
+
+const validateRebalance = (targetGroupId: number, nextShare: number) => {
+  const list = props.segment.group || []
+  const target = list.find(item => item.id === targetGroupId)
+  const defaultGroup = list.find(item => item.is_default)
+  if (!target || !defaultGroup) {
+    return { valid: false, message: '未找到目标组或默认组，请刷新后重试' }
+  }
+  const minShare = Math.max(0, target.share + defaultGroup.share - 1000)
+  const maxShare = Math.min(1000, target.share + defaultGroup.share)
+  if (!Number.isFinite(nextShare) || nextShare < minShare || nextShare > maxShare) {
+    return {
+      valid: false,
+      message: `流量不合法，仅可在 ${formatSharePercent(minShare)} ~ ${formatSharePercent(maxShare)} 范围内调整`
+    }
+  }
+  return { valid: true }
+}
+
+const applyLocalRebalance = (targetGroupId: number, nextShare: number) => {
+  const list = props.segment.group || []
+  const target = list.find(item => item.id === targetGroupId)
+  if (!target) return
+  const prevShare = target.share
+  const delta = nextShare - prevShare
+  const defaultGroup = list.find(item => item.is_default)
+  target.share = nextShare
+  if (defaultGroup && defaultGroup.id !== targetGroupId) {
+    defaultGroup.share = Math.max(0, Math.min(1000, defaultGroup.share - delta))
+  }
+  if (selectedGroupDetail.value?.id === targetGroupId) {
+    selectedGroupDetail.value.share = nextShare
+  } else if (defaultGroup && selectedGroupDetail.value?.id === defaultGroup.id) {
+    selectedGroupDetail.value.share = defaultGroup.share
+  }
+  bumpSegmentVersion()
+}
 
 const openRebalance = (grp: Group) => {
     rebalanceGroup.value = grp
-    rebalanceShare.value = grp.share
+    rebalancePercent.value = grp.share / 10
     rebalanceVisible.value = true
 }
 
 const handleRebalance = async () => {
     if (!rebalanceGroup.value) return
+    const nextShare = Math.round(rebalancePercent.value * 10)
+    const validation = validateRebalance(rebalanceGroup.value.id, nextShare)
+    if (!validation.valid) {
+      ElMessage.error(validation.message)
+      return
+    }
     try {
         await rebalanceSeg(props.segment.id, {
             version: props.segment.version!,
             grp_id: rebalanceGroup.value.id,
-            share: rebalanceShare.value
+            share: nextShare
         })
+        applyLocalRebalance(rebalanceGroup.value.id, nextShare)
         ElMessage.success('Share updated')
         rebalanceVisible.value = false
-        emit('refresh')
     } catch (e) {
         // ignore
     }

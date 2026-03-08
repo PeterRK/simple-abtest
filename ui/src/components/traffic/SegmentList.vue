@@ -23,7 +23,7 @@
     </div>
 
     <div v-if="selectedSegmentDetail" class="segment-detail">
-      <GroupList :segment="selectedSegmentDetail" @refresh="refreshSelectedSegment" />
+      <GroupList :segment="selectedSegmentDetail" />
     </div>
   </div>
 </template>
@@ -39,24 +39,12 @@ const props = defineProps<{
   layer: Layer
 }>()
 
-const emit = defineEmits(['refresh'])
-
 const segmentDetails = ref<Record<number, Segment>>({})
 const segments = computed(() => props.layer.segment || [])
 const selectedSegmentId = ref<number | null>(null)
 const selectedSegmentDetail = computed(() =>
   selectedSegmentId.value != null ? segmentDetails.value[selectedSegmentId.value] || null : null
 )
-
-const refreshSelectedSegment = async () => {
-  if (selectedSegmentId.value == null) return
-  try {
-    const res = await getSegment(selectedSegmentId.value)
-    segmentDetails.value = { ...segmentDetails.value, [selectedSegmentId.value]: res.data }
-  } catch (e) {
-    // ignore
-  }
-}
 
 const handleDelete = async (seg: Segment) => {
     try {
@@ -66,8 +54,17 @@ const handleDelete = async (seg: Segment) => {
             lyr_ver: props.layer.version!,
             version: seg.version!
         })
+        props.layer.segment = (props.layer.segment || []).filter(item => item.id !== seg.id)
+        if (typeof props.layer.version === 'number') {
+          props.layer.version += 1
+        }
+        if (selectedSegmentId.value === seg.id) {
+          selectedSegmentId.value = null
+        }
+        const nextDetails = { ...segmentDetails.value }
+        delete nextDetails[seg.id]
+        segmentDetails.value = nextDetails
         ElMessage.success('Segment deleted')
-        emit('refresh')
     } catch (e) {
         // ignore
     }

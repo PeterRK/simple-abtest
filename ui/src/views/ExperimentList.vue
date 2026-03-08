@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { getApps, createApp, updateApp, deleteApp, getApp, createExp, switchExp } from '@/api'
 import type { Application, Experiment } from '@/types'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 const router = useRouter()
+const route = useRoute()
 const apps = ref<Application[]>([])
 const selectedAppId = ref<number | null>(null)
 const experiments = ref<Experiment[]>([])
@@ -216,8 +217,26 @@ const handleSwitchChange = async (val: number | boolean | string, row: Experimen
 }
 
 onMounted(() => {
-  loadApps()
+  loadApps().then(() => {
+    const appId = Number(route.query.app_id)
+    if (Number.isFinite(appId) && appId > 0) {
+      selectedAppId.value = appId
+      loadExperiments()
+    }
+  })
 })
+
+watch(
+  () => route.query.refresh,
+  () => {
+    const appId = Number(route.query.app_id)
+    if (!Number.isFinite(appId) || appId <= 0) return
+    selectedAppId.value = appId
+    loadApps().then(() => {
+      loadExperiments()
+    })
+  }
+)
 </script>
 
 <template>
