@@ -93,6 +93,9 @@ func segGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	if _, ok := requireSegPrivilege(logger, w, r, uint32(id), privilegeReadOnly); !ok {
+		return
+	}
 
 	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{
 		Isolation: sql.LevelRepeatableRead,
@@ -170,6 +173,9 @@ func segCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	if _, ok := requireLyrPrivilege(logger, w, r, req.LyrId, privilegeReadWrite); !ok {
+		return
+	}
 
 	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{
 		Isolation: sql.LevelReadUncommitted,
@@ -229,6 +235,9 @@ func segDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	if _, ok := requireSegPrivilege(logger, w, r, uint32(id), privilegeReadWrite); !ok {
+		return
+	}
 
 	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{
 		Isolation: sql.LevelReadUncommitted,
@@ -271,6 +280,9 @@ func segShuffle(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	if _, ok := requireSegPrivilege(logger, w, r, uint32(id), privilegeReadWrite); !ok {
+		return
+	}
 
 	n, err := utils.SqlModify(segSql.shuffle, rand.Uint32(), id)
 	if err != nil {
@@ -299,6 +311,9 @@ func segRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}{}
 	if err = utils.HttpGetJsonArgsWithLog(logger, r, req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if _, ok := requireSegPrivilege(logger, w, r, uint32(id), privilegeReadWrite); !ok {
 		return
 	}
 

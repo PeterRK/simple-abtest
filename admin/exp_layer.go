@@ -83,6 +83,9 @@ func lyrGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	if _, ok := requireLyrPrivilege(logger, w, r, uint32(id), privilegeReadOnly); !ok {
+		return
+	}
 
 	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{
 		Isolation: sql.LevelRepeatableRead,
@@ -161,6 +164,9 @@ func lyrCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	if _, ok := requireExpPrivilege(logger, w, r, req.ExpId, privilegeReadWrite); !ok {
+		return
+	}
 
 	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{
 		Isolation: sql.LevelReadUncommitted,
@@ -210,6 +216,9 @@ func lyrUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	if _, ok := requireLyrPrivilege(logger, w, r, uint32(id), privilegeReadWrite); !ok {
+		return
+	}
 	req.Id = uint32(id)
 
 	n, err := utils.SqlModify(lyrSql.update, req.Name,
@@ -240,6 +249,9 @@ func lyrDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}{}
 	if err = utils.HttpGetJsonArgsWithLog(logger, r, req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if _, ok := requireLyrPrivilege(logger, w, r, uint32(id), privilegeReadWrite); !ok {
 		return
 	}
 
@@ -292,6 +304,9 @@ func lyrRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	if err != nil || len(req.Segment) < 2 ||
 		req.Segment[0].Begin != 0 || req.Segment[len(req.Segment)-1].End != 100 {
 		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if _, ok := requireLyrPrivilege(logger, w, r, uint32(id), privilegeReadWrite); !ok {
 		return
 	}
 	set := make(map[uint32]bool)

@@ -115,7 +115,7 @@ func prepareGrpSql(db *sql.DB) (err error) {
 		return err
 	}
 	cfgSql.getOne, err = db.Prepare(
-		"SELECT `content` FROM `exp_config` WHERE `cfg_id`=?")
+		"SELECT `content` FROM `exp_config` WHERE `cfg_id`=? AND `grp_id`=?")
 	if err != nil {
 		return err
 	}
@@ -135,7 +135,7 @@ func bindGrpOp(router *httprouter.Router, registry *prometheus.Registry) {
 
 	router.Handle(http.MethodGet, "/api/grp/:id/cfg", cfgGetList)
 	router.Handle(http.MethodPost, "/api/grp/:id/cfg", cfgCreate)
-	router.Handle(http.MethodGet, "/api/cfg/:id", cfgGetOne)
+	router.Handle(http.MethodGet, "/api/grp/:gid/cfg/:cid", cfgGetOne)
 }
 
 func stampToStr(stamp int64) string {
@@ -150,6 +150,9 @@ func grpGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if _, ok := requireGrpPrivilege(logger, w, r, uint32(id), privilegeReadOnly); !ok {
 		return
 	}
 
@@ -201,6 +204,9 @@ func grpCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	err := utils.HttpGetJsonArgsWithLog(logger, r, req)
 	if err != nil || len(req.Name) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if _, ok := requireSegPrivilege(logger, w, r, req.SegId, privilegeReadWrite); !ok {
 		return
 	}
 
@@ -258,6 +264,9 @@ func grpUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	if _, ok := requireGrpPrivilege(logger, w, r, uint32(id), privilegeReadWrite); !ok {
+		return
+	}
 	req.Id = uint32(id)
 
 	n, err := utils.SqlModify(grpSql.update, req.Name,
@@ -289,6 +298,9 @@ func grpDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}{}
 	if err = utils.HttpGetJsonArgsWithLog(logger, r, req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if _, ok := requireGrpPrivilege(logger, w, r, uint32(id), privilegeReadWrite); !ok {
 		return
 	}
 
@@ -331,6 +343,9 @@ func cfgGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	grpId, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if _, ok := requireGrpPrivilege(logger, w, r, uint32(grpId), privilegeReadOnly); !ok {
 		return
 	}
 	query := r.URL.Query()
@@ -376,14 +391,22 @@ func cfgGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 func cfgGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	logger := utils.NewContextLogger("cfgGetOne")
-	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
+	grpId, err := strconv.ParseUint(p.ByName("gid"), 10, 32)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if _, ok := requireGrpPrivilege(logger, w, r, uint32(grpId), privilegeReadOnly); !ok {
+		return
+	}
+	cfgId, err := strconv.ParseUint(p.ByName("cid"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	var content string
-	err = cfgSql.getOne.QueryRow(id).Scan(&content)
+	err = cfgSql.getOne.QueryRow(cfgId, grpId).Scan(&content)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			w.WriteHeader(http.StatusNotFound)
@@ -394,7 +417,7 @@ func cfgGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	logger.Debugf("get config by id: %d", id)
+	logger.Debugf("get config by id: %d", cfgId)
 	w.Write(utils.UnsafeStringToBytes(content))
 }
 
@@ -403,6 +426,9 @@ func cfgCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	grpId, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if _, ok := requireGrpPrivilege(logger, w, r, uint32(grpId), privilegeReadWrite); !ok {
 		return
 	}
 

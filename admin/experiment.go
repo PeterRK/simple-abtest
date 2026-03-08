@@ -109,6 +109,9 @@ func expGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	if _, ok := requireExpPrivilege(logger, w, r, uint32(id), privilegeReadOnly); !ok {
+		return
+	}
 
 	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{
 		Isolation: sql.LevelRepeatableRead,
@@ -187,6 +190,9 @@ func expCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	if _, ok := requireAppPrivilege(logger, w, r, req.AppId, privilegeReadWrite); !ok {
+		return
+	}
 
 	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{
 		Isolation: sql.LevelReadUncommitted,
@@ -238,6 +244,9 @@ func expUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	if _, ok := requireExpPrivilege(logger, w, r, uint32(id), privilegeReadWrite); !ok {
+		return
+	}
 
 	req := &expDetail{}
 	err = utils.HttpGetJsonArgsWithLog(logger, r, req)
@@ -287,6 +296,9 @@ func expDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	if _, ok := requireExpPrivilege(logger, w, r, uint32(id), privilegeReadWrite); !ok {
+		return
+	}
 
 	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{
 		Isolation: sql.LevelReadUncommitted,
@@ -329,6 +341,9 @@ func expShuffle(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	if _, ok := requireExpPrivilege(logger, w, r, uint32(id), privilegeReadWrite); !ok {
+		return
+	}
 
 	n, err := utils.SqlModify(expSql.shuffle, rand.Uint32(), id)
 	if err != nil {
@@ -360,6 +375,9 @@ func expSwitch(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 	if req.Status != 0 && req.Status != 1 {
 		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if _, ok := requireExpPrivilege(logger, w, r, uint32(id), privilegeReadWrite); !ok {
 		return
 	}
 

@@ -1,22 +1,193 @@
 ## Admin HTTP API
 
-This document describes the HTTP endpoints exposed by the admin service.
+This document describes the HTTP endpoints exposed by the `admin` service.
 
-### Conventions
+### Base and Content Type
 
-- **Content-Type**: `application/json` by default.
-- **Optimistic Locking**: Mutating operations require a `version` field. The server checks this against the stored version.
-  - On mismatch, returns `409 Conflict`.
-  - On success, the resource (or parent) version is incremented.
-- **Common Errors**: `400 Bad Request` (invalid input), `404 Not Found` (resource missing), `500 Internal Server Error`.
+- Base path: `/api`
+- JSON endpoints use `Content-Type: application/json`
+- `POST /api/grp/:id/cfg` accepts raw body content (not JSON schema constrained)
+
+### Session Authentication
+
+Protected endpoints require these headers:
+
+- `SESSION_UID`: user id (uint32)
+- `SESSION_TOKEN`: session token
+
+Session is issued by:
+
+- `POST /api/user`
+- `POST /api/user/login`
+
+If missing/invalid/expired session:
+
+- `401 Unauthorized` (or `400 Bad Request` when `SESSION_UID` format is invalid)
+
+### Privilege Levels
+
+- `0`: no access
+- `1`: read-only
+- `2`: read-write
+- `3`: admin
+
+Rules in current implementation:
+
+- `appCreate`: requires valid session; creator is granted `admin` on new app.
+- `appUpdate` and `appDelete`: require `admin` on app.
+- Experiment and descendants (`exp/lyr/seg/grp/cfg`):
+  - `GET` requires `read-only`
+  - non-`GET` requires `read-write`
+
+### Common Behavior
+
+- Optimistic locking: many mutating endpoints require `version`; mismatch returns `409 Conflict`.
+- Common status codes:
+  - `400 Bad Request`: invalid input
+  - `401 Unauthorized`: missing/invalid session
+  - `403 Forbidden`: privilege denied or business rule denied
+  - `404 Not Found`: resource missing (only on part of endpoints)
+  - `409 Conflict`: version/business conflict
+  - `500 Internal Server Error`
 
 ---
 
+## User and Privilege
+
+### POST `/api/user`
+
+Create user and issue session.
+
+Request:
+
+```json
+{
+  "name": "alice",
+  "password": "secret"
+}
+```
+
+Response `200 OK`:
+
+```json
+{
+  "uid": 1,
+  "token": "<session-token>"
+}
+```
+
+Notes:
+
+- duplicate name -> `409 Conflict`
+
+### POST `/api/user/login`
+
+Login and issue session.
+
+Request:
+
+```json
+{
+  "name": "alice",
+  "password": "secret"
+}
+```
+
+Response `200 OK`:
+
+```json
+{
+  "uid": 1,
+  "token": "<session-token>"
+}
+```
+
+Notes:
+
+- invalid user/password -> `401 Unauthorized`
+
+### PUT `/api/user/:id`
+
+Update own password.
+
+Permission:
+
+- session required
+- only same user (`SESSION_UID == :id`)
+
+Request:
+
+```json
+{
+  "password": "new-secret"
+}
+```
+
+Response: `200 OK` empty body.
+
+### DELETE `/api/user/:id`
+
+Delete own user.
+
+Permission:
+
+- session required
+- only same user (`SESSION_UID == :id`)
+
+Response: `200 OK` empty body.
+
+### GET `/api/app/:id/privilege`
+
+Get granted users of an app.
+
+Permission:
+
+- app `admin`
+
+Response `200 OK`:
+
+```json
+[
+  {
+    "name": "alice",
+    "privilege": 2,
+    "grantor": "owner"
+  }
+]
+```
+
+### POST `/api/app/:id/privilege`
+
+Grant/revoke privilege of a user on an app.
+
+Permission:
+
+- app `admin`
+
+Request:
+
+```json
+{
+  "name": "alice",
+  "privilege": 2
+}
+```
+
+`privilege=0` means revoke.
+
+Response: `200 OK` empty body.
+
+---
+
+## Application
+
 ### POST `/api/app`
 
-Create a new application.
+Create application.
 
-**Request**
+Permission: session required.
+
+Request:
 
 ```json
 {
@@ -25,7 +196,7 @@ Create a new application.
 }
 ```
 
-**Response (200 OK)**
+Response `200 OK`:
 
 ```json
 {
@@ -36,11 +207,17 @@ Create a new application.
 }
 ```
 
+Notes:
+
+- creator gets `admin` privilege on this app automatically.
+
 ### GET `/api/app`
 
-List all applications.
+List applications accessible by current user.
 
-**Response (200 OK)**
+Permission: session required.
+
+Response `200 OK`:
 
 ```json
 [
@@ -53,9 +230,11 @@ List all applications.
 
 ### GET `/api/app/:id`
 
-Get application details and its experiments.
+Get application detail and experiment summaries.
 
-**Response (200 OK)**
+Permission: app `read-only`.
+
+Response `200 OK`:
 
 ```json
 {
@@ -77,9 +256,11 @@ Get application details and its experiments.
 
 ### PUT `/api/app/:id`
 
-Update an application.
+Update application.
 
-**Request**
+Permission: app `admin`.
+
+Request:
 
 ```json
 {
@@ -89,13 +270,15 @@ Update an application.
 }
 ```
 
-**Response (200 OK)**: Empty body.
+Response: `200 OK` empty body.
 
 ### DELETE `/api/app/:id`
 
-Delete an application (must have no experiments).
+Delete application.
 
-**Request**
+Permission: app `admin`.
+
+Request:
 
 ```json
 {
@@ -103,15 +286,23 @@ Delete an application (must have no experiments).
 }
 ```
 
-**Response (200 OK)**: Empty body; `403` if not empty.
+Response: `200 OK` empty body.
+
+Notes:
+
+- if app still has experiments -> `403 Forbidden`
 
 ---
 
+## Experiment
+
 ### POST `/api/exp`
 
-Create an experiment.
+Create experiment (also creates default layer/segment/group).
 
-**Request**
+Permission: app `read-write`.
+
+Request:
 
 ```json
 {
@@ -122,7 +313,7 @@ Create an experiment.
 }
 ```
 
-**Response (200 OK)**
+Response `200 OK`:
 
 ```json
 {
@@ -136,9 +327,9 @@ Create an experiment.
 
 ### GET `/api/exp/:id`
 
-Get experiment details including layers.
+Permission: experiment `read-only`.
 
-**Response (200 OK)**
+Response `200 OK`:
 
 ```json
 {
@@ -147,9 +338,7 @@ Get experiment details including layers.
   "name": "exp-A",
   "description": "optional",
   "version": 3,
-  "filter": [
-    ...
-  ],
+  "filter": [],
   "layer": [
     {
       "id": 3001,
@@ -161,28 +350,26 @@ Get experiment details including layers.
 
 ### PUT `/api/exp/:id`
 
-Update experiment metadata and filter.
+Permission: experiment `read-write`.
 
-**Request**
+Request:
 
 ```json
 {
   "name": "new-name",
   "description": "new desc",
   "version": 3,
-  "filter": [
-    ...
-  ]
+  "filter": []
 }
 ```
 
-**Response (200 OK)**: Empty body.
+Response: `200 OK` empty body.
 
 ### DELETE `/api/exp/:id`
 
-Delete an experiment.
+Permission: experiment `read-write`.
 
-**Request**
+Request:
 
 ```json
 {
@@ -192,19 +379,23 @@ Delete an experiment.
 }
 ```
 
-**Response (200 OK)**: Empty body.
+Response: `200 OK` empty body.
 
 ### POST `/api/exp/:id/shuffle`
 
-Regenerate experiment seed. Safe to call concurrently (no version check).
+Regenerate seed (no version check).
 
-**Response (200 OK)**: Empty body.
+Permission: experiment `read-write`.
+
+Response: `200 OK` empty body.
 
 ### PUT `/api/exp/:id/status`
 
-Toggle experiment status (`0`: stopped, `1`: active).
+Toggle status (`0` stopped, `1` active).
 
-**Request**
+Permission: experiment `read-write`.
+
+Request:
 
 ```json
 {
@@ -213,15 +404,19 @@ Toggle experiment status (`0`: stopped, `1`: active).
 }
 ```
 
-**Response (200 OK)**: Empty body.
+Response: `200 OK` empty body.
 
 ---
 
+## Layer
+
 ### POST `/api/lyr`
 
-Create a layer (with a default segment).
+Create layer.
 
-**Request**
+Permission: experiment `read-write`.
+
+Request:
 
 ```json
 {
@@ -231,13 +426,21 @@ Create a layer (with a default segment).
 }
 ```
 
-**Response (200 OK)**: Created layer object.
+Response `200 OK`:
+
+```json
+{
+  "id": 3001,
+  "name": "layer-1",
+  "version": 0
+}
+```
 
 ### GET `/api/lyr/:id`
 
-Get layer details including segments.
+Permission: layer `read-only`.
 
-**Response (200 OK)**
+Response `200 OK`:
 
 ```json
 {
@@ -249,11 +452,6 @@ Get layer details including segments.
       "id": 4001,
       "begin": 0,
       "end": 50
-    },
-    {
-      "id": 4002,
-      "begin": 50,
-      "end": 100
     }
   ]
 }
@@ -261,9 +459,9 @@ Get layer details including segments.
 
 ### PUT `/api/lyr/:id`
 
-Update layer metadata.
+Permission: layer `read-write`.
 
-**Request**
+Request:
 
 ```json
 {
@@ -272,13 +470,13 @@ Update layer metadata.
 }
 ```
 
-**Response (200 OK)**: Empty body.
+Response: `200 OK` empty body.
 
 ### DELETE `/api/lyr/:id`
 
-Delete a layer.
+Permission: layer `read-write`.
 
-**Request**
+Request:
 
 ```json
 {
@@ -288,13 +486,15 @@ Delete a layer.
 }
 ```
 
-**Response (200 OK)**: Empty body.
+Response: `200 OK` empty body.
 
 ### POST `/api/lyr/:id/rebalance`
 
-Rebalance layer segments. Segments must be contiguous and cover [0, 100).
+Rebalance layer segments; must be contiguous and cover `[0,100)`.
 
-**Request**
+Permission: layer `read-write`.
+
+Request:
 
 ```json
 {
@@ -314,15 +514,19 @@ Rebalance layer segments. Segments must be contiguous and cover [0, 100).
 }
 ```
 
-**Response (200 OK)**: Empty body.
+Response: `200 OK` empty body.
 
 ---
 
+## Segment
+
 ### POST `/api/seg`
 
-Create a new segment (initially `[100, 100)`, with a default group).
+Create segment (`[100,100)` initially, with default group).
 
-**Request**
+Permission: layer `read-write`.
+
+Request:
 
 ```json
 {
@@ -331,7 +535,7 @@ Create a new segment (initially `[100, 100)`, with a default group).
 }
 ```
 
-**Response (200 OK)**
+Response `200 OK`:
 
 ```json
 {
@@ -344,9 +548,9 @@ Create a new segment (initially `[100, 100)`, with a default group).
 
 ### GET `/api/seg/:id`
 
-Get segment details including groups.
+Permission: segment `read-only`.
 
-**Response (200 OK)**
+Response `200 OK`:
 
 ```json
 {
@@ -360,11 +564,6 @@ Get segment details including groups.
       "share": 500,
       "name": "DEFAULT",
       "is_default": true
-    },
-    {
-      "id": 5002,
-      "share": 500,
-      "name": "B"
     }
   ]
 }
@@ -372,9 +571,11 @@ Get segment details including groups.
 
 ### DELETE `/api/seg/:id`
 
-Delete a segment (must be empty range `begin == end`).
+Delete segment (requires `begin == end`).
 
-**Request**
+Permission: segment `read-write`.
+
+Request:
 
 ```json
 {
@@ -384,19 +585,23 @@ Delete a segment (must be empty range `begin == end`).
 }
 ```
 
-**Response (200 OK)**: Empty body.
+Response: `200 OK` empty body.
 
 ### POST `/api/seg/:id/shuffle`
 
-Regenerate segment seed. No version check.
+Regenerate seed (no version check).
 
-**Response (200 OK)**: Empty body.
+Permission: segment `read-write`.
+
+Response: `200 OK` empty body.
 
 ### POST `/api/seg/:id/rebalance`
 
-Adjust traffic share between default and target group.
+Adjust share between default group and one target group.
 
-**Request**
+Permission: segment `read-write`.
+
+Request:
 
 ```json
 {
@@ -406,15 +611,19 @@ Adjust traffic share between default and target group.
 }
 ```
 
-**Response (200 OK)**: Empty body.
+Response: `200 OK` empty body.
 
 ---
 
+## Group and Config
+
 ### POST `/api/grp`
 
-Create a group (share 0).
+Create group (initial share `0`).
 
-**Request**
+Permission: segment `read-write`.
+
+Request:
 
 ```json
 {
@@ -424,13 +633,22 @@ Create a group (share 0).
 }
 ```
 
-**Response (200 OK)**: Created group object.
+Response `200 OK`:
+
+```json
+{
+  "id": 5002,
+  "name": "variant-A",
+  "share": 0,
+  "version": 0
+}
+```
 
 ### GET `/api/grp/:id`
 
-Get group details.
+Permission: group `read-only`.
 
-**Response (200 OK)**
+Response `200 OK`:
 
 ```json
 {
@@ -441,39 +659,35 @@ Get group details.
   "version": 1,
   "cfg_id": 7001,
   "cfg_stamp": "2026-02-26 12:00:00",
-  "force_hit": [
-    "u1",
-    "u2"
-  ],
+  "force_hit": ["u1", "u2"],
   "config": "{...}"
 }
 ```
 
 ### PUT `/api/grp/:id`
 
-Update metadata, force-hit keys, and config ID.
+Permission: group `read-write`.
 
-**Request**
+Request:
 
 ```json
 {
   "name": "variant-A",
   "version": 1,
   "cfg_id": 7001,
-  "force_hit": [
-    "u1",
-    "u2"
-  ]
+  "force_hit": ["u1", "u2"]
 }
 ```
 
-**Response (200 OK)**: Empty body.
+Response: `200 OK` empty body.
 
 ### DELETE `/api/grp/:id`
 
-Delete a non-default group (must have `share == 0`).
+Delete non-default group (requires `share == 0`).
 
-**Request**
+Permission: group `read-write`.
+
+Request:
 
 ```json
 {
@@ -483,41 +697,48 @@ Delete a non-default group (must have `share == 0`).
 }
 ```
 
-**Response (200 OK)**: Empty body.
+Response: `200 OK` empty body.
 
 ### GET `/api/grp/:id/cfg`
 
-List historical configs.
+List config history.
 
-**Query**: `begin` (Unix timestamp in seconds).
+Permission: group `read-only`.
 
-**Response (200 OK)**
+Query:
+
+- `begin` (optional, unix timestamp seconds, default `0`)
+
+Response `200 OK`:
 
 ```json
 [
   {
     "id": 7001,
     "stamp": "2026-02-26 12:00:00"
-  },
-  ...
+  }
 ]
 ```
 
 ### POST `/api/grp/:id/cfg`
 
-Create a new config. Body is raw config content.
+Create config record; request body is raw content.
 
-**Request**: Arbitrary content (e.g., JSON).
+Permission: group `read-write`.
 
-**Response (200 OK)**: 
+Response `200 OK`:
+
 ```json
-{ 
-  "id": 7003 
+{
+  "id": 7003,
+  "stamp": "2026-02-26 12:30:00"
 }
 ```
 
-### GET `/api/cfg/:id`
+### GET `/api/grp/:gid/cfg/:cid`
 
-Get config content by config ID.
+Get one config content.
 
-**Response (200 OK)**: Raw content body (e.g., JSON).
+Permission: group `read-only`.
+
+Response `200 OK`: raw content body.

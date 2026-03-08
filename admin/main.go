@@ -13,6 +13,7 @@ import (
 	"github.com/peterrk/simple-abtest/utils"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -35,8 +36,11 @@ func Main() int {
 			MaxBackups int `yaml:"max_backups"`
 			MaxDays    int `yaml:"max_days"`
 		} `yaml:"log"`
-		Test     bool   `yaml:"test"`
-		Database string `yaml:"db"`
+		Test            bool              `yaml:"test"`
+		Database        string            `yaml:"db"`
+		Redis           utils.RedisConfig `yaml:"redis"`
+		SessionPrefix   string            `yaml:"session_prefix"`
+		PrivilegePrefix string            `yaml:"privilege_prefix"`
 	}{}
 
 	err := utils.LoadYamlFile(cfgPath, &config)
@@ -45,10 +49,28 @@ func Main() int {
 		return 1
 	}
 
+	if len(config.Redis.Address) == 0 {
+		fmt.Println("redis is unspecified")
+		return 1
+	}
 	if len(config.Database) == 0 {
 		fmt.Println("database is unspecified")
 		return 1
 	}
+	if len(config.SessionPrefix) == 0 || len(config.PrivilegePrefix) == 0 {
+		fmt.Println("session prefix or privilege prefix is unspecified")
+		return 1
+	}
+	sessionPrefix = config.SessionPrefix
+	privilegePrefix = config.PrivilegePrefix
+
+	rds, err = utils.NewRedisClientWithCheck(&config.Redis)
+	if err != nil {
+		fmt.Printf("fail to connect redis: %v\n", err)
+		return -1
+	}
+	defer rds.Close()
+
 	db, err = sql.Open("mysql", utils.OverwriteMysqlParams(
 		config.Database, map[string]string{"clientFoundRows": "true"}))
 	if err != nil {
@@ -82,6 +104,7 @@ func Main() int {
 	bindLyrOp(router, registry)
 	bindSegOp(router, registry)
 	bindGrpOp(router, registry)
+	bindUserOp(router, registry)
 
 	if config.Test {
 		router.HandlerFunc(http.MethodGet, "/debug/pprof/", pprof.Index)
@@ -99,7 +122,13 @@ func Main() int {
 	return 0
 }
 
-var db *sql.DB
+var (
+	db  *sql.DB
+	rds *redis.Client
+
+	sessionPrefix   string
+	privilegePrefix string
+)
 
 func prepareSqls() error {
 	if err := prepareAppSql(db); err != nil {
@@ -115,6 +144,9 @@ func prepareSqls() error {
 		return err
 	}
 	if err := prepareGrpSql(db); err != nil {
+		return err
+	}
+	if err := prepareUserSql(db); err != nil {
 		return err
 	}
 	return nil

@@ -21,8 +21,11 @@ var appSql struct {
 }
 
 func prepareAppSql(db *sql.DB) (err error) {
-	appSql.getList, err = db.Prepare(
-		"SELECT `app_id`,`name` FROM `application` ORDER BY `app_id` ASC")
+	appSql.getList, err = db.Prepare("SELECT t2.* FROM " +
+		"( SELECT `app_id` FROM `privilege` WHERE `uid`=? ) t1 " +
+		"INNER JOIN " +
+		"( SELECT `app_id`,`name` FROM `application` ) t2 " +
+		"ON t1.app_id = t2.app_id ORDER BY t2.app_id ASC")
 	if err != nil {
 		return err
 	}
@@ -78,7 +81,12 @@ type appDetail struct {
 
 func appGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	logger := utils.NewContextLogger("appGetList")
-	rows, err := appSql.getList.Query()
+	uid, ok := verifySession(logger, w, r)
+	if !ok {
+		return
+	}
+
+	rows, err := appSql.getList.Query(uid)
 	if err != nil {
 		logger.Errorf("fail to run sql[app.getList]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -110,6 +118,9 @@ func appGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if _, ok := requireAppPrivilege(logger, w, r, uint32(id), privilegeReadOnly); !ok {
 		return
 	}
 
@@ -171,6 +182,11 @@ func appGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 func appCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	logger := utils.NewContextLogger("appCreate")
+	uid, ok := verifySession(logger, w, r)
+	if !ok {
+		return
+	}
+
 	req := &appDetail{}
 	err := utils.HttpGetJsonArgsWithLog(logger, r, req)
 	if err != nil || len(req.Name) == 0 {
@@ -184,9 +200,17 @@ func appCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	appId := uint32(id)
+	if _, err = utils.SqlModify(privSql.update,
+		uid, appId, privilegeAdmin, uid,
+		privilegeAdmin, uid); err != nil {
+		logger.Errorf("fail to run sql[priv.update]: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 
 	resp := req
-	resp.Id = uint32(id)
+	resp.Id = appId
 	resp.Version = 0
 	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
 }
@@ -196,6 +220,9 @@ func appUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if _, ok := requireAppPrivilege(logger, w, r, uint32(id), privilegeAdmin); !ok {
 		return
 	}
 
@@ -226,6 +253,9 @@ func appDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if _, ok := requireAppPrivilege(logger, w, r, uint32(id), privilegeAdmin); !ok {
 		return
 	}
 	req := &struct {
