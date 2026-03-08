@@ -50,7 +50,7 @@ type grpDetail struct {
 
 type cfgSummary struct {
 	Id    uint32 `json:"id"`
-	Stamp string `json:"stamp"`
+	Stamp string `json:"stamp,omitempty"`
 }
 
 func prepareGrpSql(db *sql.DB) (err error) {
@@ -61,11 +61,11 @@ func prepareGrpSql(db *sql.DB) (err error) {
 		return err
 	}
 	grpSql.getOne, err = db.Prepare("SELECT t1.*," +
-		"`create_time`,COALESCE(`content`,'') AS `content` FROM " +
+		"COALESCE(`stamp`,0),COALESCE(`content`,'') AS `content` FROM " +
 		"( SELECT `name`,`share`,`is_default`,`force_hit`," +
 		"`version`,`cfg_id` FROM `exp_group` WHERE `grp_id`=? ) t1 " +
 		"LEFT JOIN " +
-		"( SELECT `cfg_id`,`create_time`,`content` " +
+		"( SELECT `cfg_id`,`stamp`,`content` " +
 		"FROM `exp_config` ) t2 " +
 		"ON t1.cfg_id = t2.cfg_id")
 	if err != nil {
@@ -109,8 +109,8 @@ func prepareGrpSql(db *sql.DB) (err error) {
 	}
 
 	cfgSql.getList, err = db.Prepare(
-		"SELECT `cfg_id`,`create_time` FROM `exp_config` " +
-			"WHERE `grp_id`=? AND create_time>=? ORDER BY `cfg_id` ASC")
+		"SELECT `cfg_id`,`stamp` FROM `exp_config` " +
+			"WHERE `grp_id`=? AND stamp>=? ORDER BY `cfg_id` ASC")
 	if err != nil {
 		return err
 	}
@@ -120,7 +120,7 @@ func prepareGrpSql(db *sql.DB) (err error) {
 		return err
 	}
 	cfgSql.create, err = db.Prepare(
-		"INSERT INTO `exp_config`(`grp_id`,`content`) VALUES (?,?)")
+		"INSERT INTO `exp_config`(`grp_id`,`stamp`,`content`) VALUES (?,?,?)")
 	if err != nil {
 		return err
 	}
@@ -138,6 +138,13 @@ func bindGrpOp(router *httprouter.Router, registry *prometheus.Registry) {
 	router.Handle(http.MethodGet, "/api/cfg/:id", cfgGetOne)
 }
 
+func stampToStr(stamp int64) string {
+	if stamp <= 0 {
+		return ""
+	}
+	return time.Unix(stamp, 0).Format(time.DateTime)
+}
+
 func grpGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	logger := utils.NewContextLogger("grpGetOne")
 	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
@@ -149,7 +156,7 @@ func grpGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	resp := &grpDetail{}
 	resp.Id = uint32(id)
 
-	var stamp sql.NullTime
+	var stamp int64
 	var forceHit string
 	err = grpSql.getOne.QueryRow(id).Scan(&resp.Name,
 		&resp.Share, &resp.IsDefault, &forceHit,
@@ -163,12 +170,10 @@ func grpGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		}
 		return
 	}
-	if stamp.Valid {
-		resp.CfgStamp = stamp.Time.Format(time.DateTime)
-	}
 	if len(forceHit) != 0 {
 		resp.ForceHit = strings.Split(forceHit, ",")
 	}
+	resp.CfgStamp = stampToStr(stamp)
 
 	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
 }
@@ -338,7 +343,7 @@ func cfgGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		}
 	}
 
-	rows, err := cfgSql.getList.Query(grpId, time.Unix(begin, 0))
+	rows, err := cfgSql.getList.Query(grpId, begin)
 	if err != nil {
 		logger.Errorf("fail to run sql[cfg.getList]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -349,7 +354,7 @@ func cfgGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	var resp []cfgSummary
 	for rows.Next() {
 		var id uint32
-		var stamp time.Time
+		var stamp int64
 		err := rows.Scan(&id, &stamp)
 		if err != nil {
 			logger.Errorf("fail to run sql[cfg.getList]: %v", err)
@@ -358,7 +363,7 @@ func cfgGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		}
 		resp = append(resp, cfgSummary{
 			Id:    id,
-			Stamp: stamp.Format(time.DateTime),
+			Stamp: stampToStr(stamp),
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -406,13 +411,18 @@ func cfgCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	id, err := utils.SqlCreate(cfgSql.create, grpId, utils.UnsafeBytesToString(raw))
+	stamp := time.Now().Unix()
+	id, err := utils.SqlCreate(cfgSql.create, grpId,
+		stamp, utils.UnsafeBytesToString(raw))
 	if err != nil {
 		logger.Errorf("fail to run sql[cfg.create]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	resp := &cfgSummary{Id: uint32(id)}
+	resp := &cfgSummary{
+		Id:    uint32(id),
+		Stamp: stampToStr(stamp),
+	}
 	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
 }

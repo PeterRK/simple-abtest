@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS exp_config (
 	content TEXT NOT NULL,
 	
 	create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+	stamp BIGINT NOT NULL,
 	
-	INDEX (grp_id, create_time)
+	INDEX (grp_id, stamp)
 ) AUTO_INCREMENT = 1;
