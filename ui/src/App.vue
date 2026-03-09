@@ -10,7 +10,7 @@ import { isStrongPassword } from '@/utils/password'
 const { locale, setLocale, t } = useI18n()
 const { session, isLoggedIn } = useAuth()
 const accountDialogVisible = ref(false)
-const accountForm = ref({ password: '' })
+const accountForm = ref({ oldPassword: '', newPassword: '' })
 const updatingPassword = ref(false)
 const deletingUser = ref(false)
 const loggingOut = ref(false)
@@ -20,7 +20,8 @@ const handleLocaleChange = (nextLocale: string) => {
 }
 
 const openAccountDialog = () => {
-  accountForm.value.password = ''
+  accountForm.value.oldPassword = ''
+  accountForm.value.newPassword = ''
   accountDialogVisible.value = true
 }
 
@@ -43,18 +44,26 @@ const handleUpdatePassword = async () => {
     openAuthDialog()
     return
   }
-  if (!accountForm.value.password) {
+  if (!accountForm.value.oldPassword) {
+    ElMessage.error(t('message.oldPasswordRequired'))
+    return
+  }
+  if (!accountForm.value.newPassword) {
     ElMessage.error(t('message.passwordRequired'))
     return
   }
-  if (!isStrongPassword(accountForm.value.password)) {
+  if (!isStrongPassword(accountForm.value.newPassword)) {
     ElMessage.error(t('message.passwordRule'))
     return
   }
   updatingPassword.value = true
   try {
-    await updateUserPassword(session.value.uid, { password: accountForm.value.password })
-    accountForm.value.password = ''
+    await updateUserPassword(session.value.uid, {
+      password: accountForm.value.oldPassword,
+      new_password: accountForm.value.newPassword
+    })
+    accountForm.value.oldPassword = ''
+    accountForm.value.newPassword = ''
     ElMessage.success(t('message.passwordUpdated'))
   } catch {
     ElMessage.error(t('message.updateFailed'))
@@ -68,10 +77,14 @@ const handleDeleteUser = async () => {
     openAuthDialog()
     return
   }
+  if (!accountForm.value.oldPassword) {
+    ElMessage.error(t('message.oldPasswordRequired'))
+    return
+  }
   try {
     deletingUser.value = true
     await ElMessageBox.confirm(t('confirm.deleteUser'), t('common.warning'), { type: 'warning' })
-    await deleteUser(session.value.uid)
+    await deleteUser(session.value.uid, { password: accountForm.value.oldPassword })
     clearSession()
     closeAuthDialog()
     accountDialogVisible.value = false
@@ -118,8 +131,11 @@ onMounted(() => {
     </el-main>
     <el-dialog v-model="accountDialogVisible" :title="t('settings.title')" width="460px">
       <el-form :model="accountForm">
-        <el-form-item :label="t('auth.password')">
-          <el-input v-model="accountForm.password" type="password" show-password />
+        <el-form-item :label="t('settings.oldPassword')">
+          <el-input v-model="accountForm.oldPassword" type="password" show-password />
+        </el-form-item>
+        <el-form-item :label="t('settings.newPassword')">
+          <el-input v-model="accountForm.newPassword" type="password" show-password />
         </el-form-item>
       </el-form>
       <template #footer>

@@ -23,6 +23,7 @@ Session is issued by:
 If missing/invalid/expired session:
 
 - `401 Unauthorized` (or `400 Bad Request` when `SESSION_UID` format is invalid)
+- Exception: `PUT /api/user/:id` and `DELETE /api/user/:id` validate `password` instead of session.
 
 ### Privilege Levels
 
@@ -44,7 +45,7 @@ Rules in current implementation:
 - Optimistic locking: many mutating endpoints require `version`; mismatch returns `409 Conflict`.
 - Common status codes:
   - `400 Bad Request`: invalid input
-  - `401 Unauthorized`: missing/invalid session
+  - `401 Unauthorized`: missing/invalid session or invalid password credential
   - `403 Forbidden`: privilege denied or business rule denied
   - `404 Not Found`: resource missing (only on part of endpoints)
   - `409 Conflict`: version/business conflict
@@ -108,18 +109,18 @@ Notes:
 
 ### PUT `/api/user/:id`
 
-Update own password.
+Update user password.
 
 Permission:
 
-- session required
-- only same user (`SESSION_UID == :id`)
+- old password required
 
 Request:
 
 ```json
 {
-  "password": "new-secret"
+  "password": "old-secret",
+  "new_password": "new-secret"
 }
 ```
 
@@ -127,12 +128,19 @@ Response: `200 OK` empty body.
 
 ### DELETE `/api/user/:id`
 
-Delete own user.
+Delete user.
 
 Permission:
 
-- session required
-- only same user (`SESSION_UID == :id`)
+- old password required
+
+Request:
+
+```json
+{
+  "password": "old-secret"
+}
+```
 
 Response: `200 OK` empty body.
 

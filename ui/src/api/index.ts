@@ -23,7 +23,11 @@ adminApi.interceptors.request.use((config) => {
 adminApi.interceptors.response.use(
   (resp) => resp,
   (error) => {
-    if (error?.response?.status === 401) {
+    const status = error?.response?.status
+    const method = (error?.config?.method || '').toLowerCase()
+    const url = String(error?.config?.url || '')
+    const isPasswordVerifyApi = (method === 'put' || method === 'delete') && /^\/user\/\d+$/.test(url)
+    if (status === 401 && !isPasswordVerifyApi) {
       clearSession()
     }
     return Promise.reject(error)
@@ -35,8 +39,8 @@ export const registerUser = (data: { name: string; password: string }) =>
   adminApi.post<{ uid: number; token: string }>('/user', data)
 export const loginUser = (data: { name: string; password: string }) =>
   adminApi.post<{ uid: number; token: string }>('/user/login', data)
-export const updateUserPassword = (uid: number, data: { password: string }) => adminApi.put(`/user/${uid}`, data)
-export const deleteUser = (uid: number) => adminApi.delete(`/user/${uid}`)
+export const updateUserPassword = (uid: number, data: { password: string; new_password: string }) => adminApi.put(`/user/${uid}`, data)
+export const deleteUser = (uid: number, data: { password: string }) => adminApi.delete(`/user/${uid}`, { data })
 
 // Application
 export const getApps = () => adminApi.get<Application[]>('/app')

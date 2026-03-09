@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
@@ -18,8 +19,8 @@ var userSql struct {
 	update *sql.Stmt
 	remove *sql.Stmt
 
-	getSalt   *sql.Stmt
 	getByName *sql.Stmt
+	getByUid  *sql.Stmt
 }
 
 var privSql struct {
@@ -48,13 +49,13 @@ func prepareUserSql(db *sql.DB) (err error) {
 	if err != nil {
 		return err
 	}
-	userSql.getSalt, err = db.Prepare(
-		"SELECT `slat` FROM `user` WHERE `uid`=?")
+	userSql.getByName, err = db.Prepare(
+		"SELECT `uid`,`slat`,`password` FROM `user` WHERE `name`=?")
 	if err != nil {
 		return err
 	}
-	userSql.getByName, err = db.Prepare(
-		"SELECT `uid`,`slat`,`password` FROM `user` WHERE `name`=?")
+	userSql.getByUid, err = db.Prepare(
+		"SELECT `slat`,`password` FROM `user` WHERE `uid`=?")
 	if err != nil {
 		return err
 	}
@@ -141,6 +142,34 @@ func hashPassword(password string, salt []byte) [32]byte {
 	var sum [sha256.Size]byte
 	h.Sum(sum[:0])
 	return sum
+}
+
+func getUserCredentialByUid(ctx context.Context, uid uint32) ([]byte, []byte, error) {
+	var (
+		salt     []byte
+		password []byte
+	)
+	if err := userSql.getByUid.QueryRowContext(ctx, uid).Scan(&salt, &password); err != nil {
+		return nil, nil, err
+	}
+	return salt, password, nil
+}
+
+func verifyUserPasswordByUid(ctx context.Context, logger *utils.ContextLogger,
+	uid uint32, raw string) (int, []byte) {
+	salt, password, err := getUserCredentialByUid(ctx, uid)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return http.StatusNotFound, nil
+		}
+		logger.Errorf("fail to run sql[user.getByUid]: %v", err)
+		return http.StatusInternalServerError, nil
+	}
+	digest := hashPassword(raw, salt)
+	if !bytes.Equal(digest[:], password) {
+		return http.StatusUnauthorized, nil
+	}
+	return http.StatusOK, salt
 }
 
 func userCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
@@ -244,35 +273,26 @@ func userUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	if _, ok := requireSelf(logger, w, r, target); !ok {
-		return
-	}
-
 	req := &struct {
-		Password string `json:"password"`
+		Password    string `json:"password"`
+		NewPassword string `json:"new_password"`
 	}{}
 	if !getJsonArgs(logger, w, r, req) {
 		return
 	}
-	if len(req.Password) == 0 {
+	if len(req.Password) == 0 || len(req.NewPassword) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	var salt []byte
-	err := userSql.getSalt.QueryRowContext(r.Context(), target).Scan(&salt)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			w.WriteHeader(http.StatusNotFound)
-		} else {
-			logger.Errorf("fail to run sql[user.getSalt]: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-		}
+	code, salt := verifyUserPasswordByUid(r.Context(), logger, target, req.Password)
+	if code != http.StatusOK {
+		w.WriteHeader(code)
 		return
 	}
 
-	digest := hashPassword(req.Password, salt)
-	n, err := utils.SqlModify(r.Context(), userSql.update, digest[:], target)
+	newDigest := hashPassword(req.NewPassword, salt)
+	n, err := utils.SqlModify(r.Context(), userSql.update, newDigest[:], target)
 	if err != nil {
 		logger.Errorf("fail to run sql[user.update]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -291,7 +311,20 @@ func userDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	if _, ok := requireSelf(logger, w, r, target); !ok {
+	req := &struct {
+		Password string `json:"password"`
+	}{}
+	if !getJsonArgs(logger, w, r, req) {
+		return
+	}
+	if len(req.Password) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	code, _ := verifyUserPasswordByUid(r.Context(), logger, target, req.Password)
+	if code != http.StatusOK {
+		w.WriteHeader(code)
 		return
 	}
 

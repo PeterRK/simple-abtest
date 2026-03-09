@@ -5,6 +5,7 @@ import type { Application, Experiment } from '@/types'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from '@/i18n'
+import { useAuth } from '@/auth'
 
 const router = useRouter()
 const route = useRoute()
@@ -25,6 +26,7 @@ const expDialogVisible = ref(false)
 const expForm = ref({ name: '', description: '' })
 const experimentStatusMap = ref(new Map<number, number>())
 const { t } = useI18n()
+const { isLoggedIn } = useAuth()
 const normalizeText = (text?: string) => text || ''
 
 const isAppNameDirty = computed(() => {
@@ -293,6 +295,24 @@ watch(
     selectedAppId.value = appId
     loadApps().then(() => {
       loadExperiments()
+    })
+  }
+)
+
+watch(
+  () => isLoggedIn.value,
+  (loggedIn) => {
+    if (!loggedIn) {
+      apps.value = []
+      selectedAppId.value = null
+      experiments.value = []
+      currentApp.value = null
+      return
+    }
+    loadApps().then(() => {
+      if (selectedAppId.value) {
+        loadExperiments()
+      }
     })
   }
 )

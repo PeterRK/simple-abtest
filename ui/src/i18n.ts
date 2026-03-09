@@ -74,6 +74,7 @@ const messages: Record<Locale, MessageTree> = {
       registerSuccess: '注册成功',
       userExists: '用户名已存在',
       loginFailed: '用户名或密码错误',
+      oldPasswordRequired: '原密码不能为空',
       passwordRequired: '新密码不能为空',
       passwordRule: '密码至少6位，且必须包含字母和数字',
       confirmPasswordRequired: '请再次输入密码',
@@ -139,6 +140,8 @@ const messages: Record<Locale, MessageTree> = {
     },
     settings: {
       title: '账号设置',
+      oldPassword: '原密码',
+      newPassword: '新密码',
       updatePassword: '修改密码',
       logout: '退出登录',
       deleteUser: '删除账号'
@@ -272,6 +275,7 @@ const messages: Record<Locale, MessageTree> = {
       registerSuccess: 'Registration succeeded',
       userExists: 'Username already exists',
       loginFailed: 'Invalid username or password',
+      oldPasswordRequired: 'Current password is required',
       passwordRequired: 'New password is required',
       passwordRule: 'Password must be at least 6 characters and include letters and numbers',
       confirmPasswordRequired: 'Please confirm your password',
@@ -337,6 +341,8 @@ const messages: Record<Locale, MessageTree> = {
     },
     settings: {
       title: 'Account Settings',
+      oldPassword: 'Current Password',
+      newPassword: 'New Password',
       updatePassword: 'Change Password',
       logout: 'Log out',
       deleteUser: 'Delete Account'
