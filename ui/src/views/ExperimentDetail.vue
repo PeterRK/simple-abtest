@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getExp, updateExp, shuffleExp, deleteExp, getApps, getApp, getAppPrivileges, grantAppPrivilege } from '@/api'
 import type { Experiment } from '@/api/types'
@@ -24,14 +24,34 @@ const privileges = ref<{ name: string; privilege: number; grantor: string }[]>([
 const privilegeForm = ref({ name: '', privilege: 1 })
 
 const getFilterText = (filter?: Experiment['filter']) => JSON.stringify(filter || [])
+const normalizeText = (text?: string) => text || ''
 
 const syncSnapshot = (exp: Experiment) => {
   expSnapshot.value = {
     name: exp.name,
-    description: exp.description,
+    description: normalizeText(exp.description),
     filter: getFilterText(exp.filter)
   }
 }
+
+const isExperimentNameDirty = computed(() => {
+  if (!experiment.value || !expSnapshot.value) return false
+  return expSnapshot.value.name !== experiment.value.name
+})
+
+const isExperimentDescriptionDirty = computed(() => {
+  if (!experiment.value || !expSnapshot.value) return false
+  return expSnapshot.value.description !== normalizeText(experiment.value.description)
+})
+
+const isExperimentFilterDirty = computed(() => {
+  if (!experiment.value || !expSnapshot.value) return false
+  return expSnapshot.value.filter !== getFilterText(experiment.value.filter)
+})
+
+const isExperimentDirty = computed(
+  () => isExperimentNameDirty.value || isExperimentDescriptionDirty.value || isExperimentFilterDirty.value
+)
 
 const loadExp = async () => {
   loading.value = true
@@ -48,14 +68,7 @@ const loadExp = async () => {
 
 const handleUpdate = async () => {
     if (!experiment.value) return
-    if (
-      expSnapshot.value &&
-      expSnapshot.value.name === experiment.value.name &&
-      expSnapshot.value.description === experiment.value.description &&
-      expSnapshot.value.filter === getFilterText(experiment.value.filter)
-    ) {
-      return
-    }
+    if (!isExperimentDirty.value) return
     const validation = validateExprNodes(experiment.value.filter || [])
     if (!validation.valid) {
       ElMessage.error(validation.messageKey ? t(validation.messageKey) : t('message.invalidFilter'))
@@ -213,9 +226,17 @@ onMounted(() => {
   <div class="exp-detail-page" v-if="experiment" v-loading="loading">
     <div class="exp-body">
       <div class="exp-row">
-        <el-input v-model="experiment.name" :placeholder="t('detail.expName')" />
-        <el-input v-model="experiment.description" :placeholder="t('detail.expDesc')" />
-        <el-button type="primary" @click="handleUpdate">{{ t('common.update') }}</el-button>
+        <el-input
+          v-model="experiment.name"
+          :placeholder="t('detail.expName')"
+          :class="{ 'dirty-input': isExperimentNameDirty }"
+        />
+        <el-input
+          v-model="experiment.description"
+          :placeholder="t('detail.expDesc')"
+          :class="{ 'dirty-input': isExperimentDescriptionDirty }"
+        />
+        <el-button type="primary" :disabled="!isExperimentDirty" @click="handleUpdate">{{ t('common.update') }}</el-button>
         <el-button type="danger" @click="handleDelete">{{ t('common.delete') }}</el-button>
         <div class="exp-row-right">
           <el-button @click="showPrivilegeDialog">{{ t('detail.appPrivilege') }}</el-button>

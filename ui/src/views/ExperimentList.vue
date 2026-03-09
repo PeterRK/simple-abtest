@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { getApps, createApp, updateApp, deleteApp, getApp, createExp, switchExp } from '@/api'
 import type { Application, Experiment } from '@/types'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -25,6 +25,19 @@ const expDialogVisible = ref(false)
 const expForm = ref({ name: '', description: '' })
 const experimentStatusMap = ref(new Map<number, number>())
 const { t } = useI18n()
+const normalizeText = (text?: string) => text || ''
+
+const isAppNameDirty = computed(() => {
+  if (appDialogMode.value !== 'detail' || !currentApp.value) return false
+  return currentApp.value.name !== appForm.value.name
+})
+
+const isAppDescriptionDirty = computed(() => {
+  if (appDialogMode.value !== 'detail' || !currentApp.value) return false
+  return normalizeText(currentApp.value.description) !== normalizeText(appForm.value.description)
+})
+
+const isAppDirty = computed(() => isAppNameDirty.value || isAppDescriptionDirty.value)
 
 const getRememberedAppId = () => {
   if (typeof window === 'undefined') return null
@@ -168,12 +181,7 @@ const handleUpdateApp = async () => {
     ElMessage.error(t('message.appVersionMissing'))
     return
   }
-  if (
-    currentApp.value.name === appForm.value.name &&
-    (currentApp.value.description || '') === appForm.value.description
-  ) {
-    return
-  }
+  if (!isAppDirty.value) return
   try {
     await updateApp(currentApp.value.id, {
       name: appForm.value.name,
@@ -325,28 +333,37 @@ watch(
     </el-table>
 
     <!-- App Dialog -->
-    <el-dialog v-model="appDialogVisible" :title="appDialogMode === 'create' ? t('list.appCreateTitle') : t('list.appDetailTitle')">
+    <el-dialog
+      v-model="appDialogVisible"
+      :title="appDialogMode === 'create' ? t('list.appCreateTitle') : t('list.appDetailTitle')"
+      width="520px"
+    >
       <el-form :model="appForm">
-        <el-form-item v-if="appDialogMode === 'detail' && currentApp" :label="t('common.id')">
-          <span>{{ currentApp.id }}</span>
+        <el-form-item v-if="appDialogMode === 'detail' && currentApp" :label="t('common.name')">
+          <div class="app-name-row">
+            <el-input v-model="appForm.name" :class="{ 'dirty-input': isAppNameDirty }" />
+            <span class="app-id-text">{{ t('common.id') }}: {{ currentApp.id }}</span>
+          </div>
         </el-form-item>
-        <el-form-item v-if="appDialogMode === 'detail' && currentApp" :label="t('common.accessToken')">
-          <el-input :model-value="currentApp.access_token || ''" readonly />
-        </el-form-item>
-        <el-form-item :label="t('common.name')">
+        <el-form-item v-else :label="t('common.name')">
           <el-input v-model="appForm.name" />
         </el-form-item>
         <el-form-item :label="t('common.description')">
-          <el-input v-model="appForm.description" />
+          <el-input v-model="appForm.description" :class="{ 'dirty-input': isAppDescriptionDirty }" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="appDialogVisible = false">{{ t('common.cancel') }}</el-button>
         <template v-if="appDialogMode === 'detail'">
-          <el-button type="primary" @click="handleUpdateApp">{{ t('common.update') }}</el-button>
-          <el-button type="danger" @click="handleDeleteAppInDialog">{{ t('common.delete') }}</el-button>
+          <div class="app-detail-footer">
+            <el-button type="danger" @click="handleDeleteAppInDialog">{{ t('common.delete') }}</el-button>
+            <div class="app-detail-footer-right">
+              <el-button @click="appDialogVisible = false">{{ t('common.cancel') }}</el-button>
+              <el-button type="primary" :disabled="!isAppDirty" @click="handleUpdateApp">{{ t('common.update') }}</el-button>
+            </div>
+          </div>
         </template>
         <template v-else>
+          <el-button @click="appDialogVisible = false">{{ t('common.cancel') }}</el-button>
           <el-button type="primary" @click="handleCreateApp">{{ t('common.confirm') }}</el-button>
         </template>
       </template>
@@ -378,6 +395,31 @@ watch(
 }
 .ml-2 {
     margin-left: 10px;
+}
+.app-name-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.app-id-text {
+  color: #606266;
+  white-space: nowrap;
+  font-size: 13px;
+}
+:deep(.app-name-row .el-input) {
+  flex: 1;
+}
+.app-detail-footer {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.app-detail-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 :deep(.clickable-row) {
     cursor: pointer;

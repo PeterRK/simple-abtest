@@ -23,8 +23,12 @@
 
     <div v-if="selectedGroupDetail" class="group-detail">
       <div class="group-detail-header">
-        <el-input v-model="groupForm.name" :placeholder="t('group.groupName')" />
-        <el-button type="primary" @click="handleUpdate">{{ t('common.update') }}</el-button>
+        <el-input
+          v-model="groupForm.name"
+          :placeholder="t('group.groupName')"
+          :class="{ 'dirty-input': isGroupNameDirty }"
+        />
+        <el-button type="primary" :disabled="!isGroupDirty" @click="handleUpdate">{{ t('common.update') }}</el-button>
         <div class="group-detail-actions">
           <el-button @click="handleSearchConfigs">{{ t('group.searchConfig') }}</el-button>
           <div class="config-days-input">
@@ -34,13 +38,19 @@
         </div>
       </div>
       <div class="group-config-area">
-        <el-input v-model="forceHitText" type="textarea" :rows="8" :placeholder="t('group.forceHitPlaceholder')" />
+        <el-input
+          v-model="forceHitText"
+          type="textarea"
+          :rows="8"
+          :placeholder="t('group.forceHitPlaceholder')"
+          :class="{ 'dirty-input': isForceHitDirty }"
+        />
         <el-input
           v-model="newConfigContent"
           type="textarea"
           :rows="8"
           :placeholder="t('group.configPlaceholder')"
-          :class="{ 'config-content-dirty': isConfigContentDirty }"
+          :class="{ 'dirty-input': isConfigContentDirty, 'config-content-dirty': isConfigContentDirty }"
         />
         <div class="config-history">
           <el-table
@@ -125,6 +135,26 @@ const isSameList = (left: string[], right: string[]) => {
 }
 
 const isConfigContentDirty = computed(() => (newConfigContent.value || '') !== (selectedConfigContent.value || ''))
+const isGroupNameDirty = computed(() => {
+  if (!selectedGroupDetail.value) return false
+  return selectedGroupDetail.value.name !== groupForm.value.name
+})
+
+const isForceHitDirty = computed(() => {
+  if (!selectedGroupDetail.value) return false
+  return !isSameList(selectedGroupDetail.value.force_hit || [], buildForceHitList(forceHitText.value))
+})
+
+const isConfigSelectionDirty = computed(() => {
+  if (!selectedGroupDetail.value) return false
+  const originalConfigId = selectedGroupDetail.value.cfg_id ?? 0
+  const activeConfigId = selectedConfigId.value ?? originalConfigId
+  return activeConfigId !== originalConfigId
+})
+
+const isGroupDirty = computed(
+  () => isGroupNameDirty.value || isForceHitDirty.value || isConfigSelectionDirty.value || isConfigContentDirty.value
+)
 
 const resetGroupState = () => {
   selectedGroupDetail.value = null
@@ -225,16 +255,16 @@ const handleCreate = async () => {
 const handleUpdate = async () => {
   if (!selectedGroupDetail.value) return
   try {
+    if (!isGroupDirty.value) return
     const forceHit = buildForceHitList(forceHitText.value)
     const originalConfigId = selectedGroupDetail.value.cfg_id ?? 0
     const activeConfigId = selectedConfigId.value ?? originalConfigId
-    const hasNameChange = selectedGroupDetail.value.name !== groupForm.value.name
-    const hasForceHitChange = !isSameList(selectedGroupDetail.value.force_hit || [], forceHit)
+    const hasNameChange = isGroupNameDirty.value
+    const hasForceHitChange = isForceHitDirty.value
     const nextContent = newConfigContent.value || ''
     const activeContent = selectedConfigContent.value || ''
-    const hasContentChange = nextContent !== activeContent
-    const hasConfigChange = activeConfigId !== originalConfigId
-    if (!hasNameChange && !hasForceHitChange && !hasConfigChange && !hasContentChange) return
+    const hasContentChange = isConfigContentDirty.value
+    const hasConfigChange = isConfigSelectionDirty.value
     let nextConfigId = activeConfigId
     let nextConfigContent = activeContent
     let createdConfigId: number | null = null

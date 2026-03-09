@@ -8,6 +8,7 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  --dirty-highlight-color: #e6a23c;
 }
 
 body {
@@ -19,4 +20,9 @@ body {
 
 #app {
   min-height: 100vh;
+}
+
+.dirty-input .el-input__inner,
+.dirty-input .el-textarea__inner {
+  color: var(--dirty-highlight-color);
 }

@@ -7,8 +7,12 @@
         </template>
         <div class="layer-body">
           <div class="layer-meta">
-            <el-input v-model="layer.name" :placeholder="t('layer.namePlaceholder')" />
-            <el-button size="small" type="primary" @click="handleUpdateLayer(layer)">{{ t('layer.rename') }}</el-button>
+            <el-input
+              v-model="layer.name"
+              :placeholder="t('layer.namePlaceholder')"
+              :class="{ 'dirty-input': isLayerNameDirty(layer) }"
+            />
+            <el-button size="small" type="primary" :disabled="!isLayerNameDirty(layer)" @click="handleUpdateLayer(layer)">{{ t('layer.rename') }}</el-button>
             <el-button size="small" type="danger" @click="handleDeleteLayer(layer)">{{ t('common.delete') }}</el-button>
             <div class="layer-meta-right">
               <el-button size="small" type="primary" @click="handleAddSegment(layer)">{{ t('layer.addSegment') }}</el-button>
@@ -146,6 +150,8 @@ const updateLayerDetail = (detail: Layer) => {
   layers.value = layers.value.map(layer => (layer.id === normalizedDetail.id ? normalizedDetail : layer))
   layerNameMap.value.set(normalizedDetail.id, normalizedDetail.name)
 }
+
+const isLayerNameDirty = (layer: Layer) => layerNameMap.value.get(layer.id) !== layer.name
 
 const fetchLayerDetail = async (layerId: number, force = false) => {
   if (!force && loadedLayerIds.value.has(layerId)) return
