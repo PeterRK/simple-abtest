@@ -35,7 +35,13 @@
       </div>
       <div class="group-config-area">
         <el-input v-model="forceHitText" type="textarea" :rows="8" :placeholder="t('group.forceHitPlaceholder')" />
-        <el-input v-model="newConfigContent" type="textarea" :rows="8" :placeholder="t('group.configPlaceholder')" />
+        <el-input
+          v-model="newConfigContent"
+          type="textarea"
+          :rows="8"
+          :placeholder="t('group.configPlaceholder')"
+          :class="{ 'config-content-dirty': isConfigContentDirty }"
+        />
         <div class="config-history">
           <el-table
             :data="displayConfigs"
@@ -97,7 +103,7 @@ const selectedGroupDetail = ref<Group | null>(null)
 const groupForm = ref({ name: '' })
 const forceHitText = ref('')
 const newConfigContent = ref('')
-const currentConfigContent = ref('')
+const selectedConfigContent = ref('')
 const configHistory = ref<Config[]>([])
 const selectedConfigId = ref<number | null>(null)
 const configDays = ref(7)
@@ -118,12 +124,14 @@ const isSameList = (left: string[], right: string[]) => {
   return true
 }
 
+const isConfigContentDirty = computed(() => (newConfigContent.value || '') !== (selectedConfigContent.value || ''))
+
 const resetGroupState = () => {
   selectedGroupDetail.value = null
   groupForm.value = { name: '' }
   forceHitText.value = ''
   newConfigContent.value = ''
-  currentConfigContent.value = ''
+  selectedConfigContent.value = ''
   configHistory.value = []
   selectedConfigId.value = null
   configContentCache.clear()
@@ -137,7 +145,7 @@ const loadGroupDetail = async (grpId: number) => {
     groupForm.value = { name: res.data.name }
     forceHitText.value = (res.data.force_hit || []).join('\n')
     newConfigContent.value = res.data.config || ''
-    currentConfigContent.value = res.data.config || ''
+    selectedConfigContent.value = res.data.config || ''
     selectedConfigId.value = res.data.cfg_id ?? null
     configHistory.value = res.data.cfg_id ? [{ id: res.data.cfg_id, stamp: res.data.cfg_stamp }] : []
     configContentCache.clear()
@@ -218,48 +226,40 @@ const handleUpdate = async () => {
   if (!selectedGroupDetail.value) return
   try {
     const forceHit = buildForceHitList(forceHitText.value)
-    const currentConfigId = selectedGroupDetail.value.cfg_id
-    const activeConfigId = selectedConfigId.value ?? currentConfigId ?? 0
+    const originalConfigId = selectedGroupDetail.value.cfg_id ?? 0
+    const activeConfigId = selectedConfigId.value ?? originalConfigId
     const hasNameChange = selectedGroupDetail.value.name !== groupForm.value.name
     const hasForceHitChange = !isSameList(selectedGroupDetail.value.force_hit || [], forceHit)
-    const hasConfigChange = activeConfigId !== currentConfigId
     const nextContent = newConfigContent.value || ''
-    const currentContent = currentConfigContent.value || ''
-    const hasContentChange = nextContent !== currentContent
+    const activeContent = selectedConfigContent.value || ''
+    const hasContentChange = nextContent !== activeContent
+    const hasConfigChange = activeConfigId !== originalConfigId
     if (!hasNameChange && !hasForceHitChange && !hasConfigChange && !hasContentChange) return
     let nextConfigId = activeConfigId
-    let nextConfigContent = currentConfigContent.value
+    let nextConfigContent = activeContent
     let createdConfigId: number | null = null
     let createdConfigStamp = ''
-    if (activeConfigId !== currentConfigId) {
+    if (hasContentChange) {
+      const res = await createGrpCfg(selectedGroupDetail.value.id, nextContent)
+      createdConfigId = res.data.id
+      createdConfigStamp = res.data.stamp || ''
+      nextConfigId = res.data.id
+      nextConfigContent = nextContent
+      await updateGrp(selectedGroupDetail.value.id, {
+        name: groupForm.value.name,
+        version: selectedGroupDetail.value.version,
+        cfg_id: res.data.id,
+        force_hit: forceHit
+      })
+    } else {
       await updateGrp(selectedGroupDetail.value.id, {
         name: groupForm.value.name,
         version: selectedGroupDetail.value.version,
         cfg_id: activeConfigId,
         force_hit: forceHit
       })
-    } else {
-      if (hasContentChange) {
-        const res = await createGrpCfg(selectedGroupDetail.value.id, newConfigContent.value)
-        createdConfigId = res.data.id
-        createdConfigStamp = res.data.stamp || ''
-        nextConfigId = res.data.id
-        nextConfigContent = newConfigContent.value
-        await updateGrp(selectedGroupDetail.value.id, {
-          name: groupForm.value.name,
-          version: selectedGroupDetail.value.version,
-          cfg_id: res.data.id,
-          force_hit: forceHit
-        })
-      } else {
-        await updateGrp(selectedGroupDetail.value.id, {
-          name: groupForm.value.name,
-          version: selectedGroupDetail.value.version,
-          cfg_id: currentConfigId ?? 0,
-          force_hit: forceHit
-        })
-        nextConfigId = currentConfigId ?? 0
-      }
+      nextConfigId = activeConfigId
+      nextConfigContent = activeContent
     }
     ElMessage.success(t('message.groupUpdated'))
     const nextVersion = selectedGroupDetail.value.version + 1
@@ -272,7 +272,7 @@ const handleUpdate = async () => {
       version: nextVersion,
       config: nextConfigContent
     }
-    currentConfigContent.value = nextConfigContent
+    selectedConfigContent.value = nextConfigContent
     selectedConfigId.value = nextConfigId
     configContentCache.set(nextConfigId, nextConfigContent)
     if (createdConfigId != null) {
@@ -446,6 +446,7 @@ const handleSelectConfig = async (cfg: Config | null) => {
   selectedConfigId.value = cfgId
   const cached = configContentCache.get(cfgId)
   if (cached !== undefined) {
+    selectedConfigContent.value = cached
     newConfigContent.value = cached
     return
   }
@@ -458,6 +459,7 @@ const handleSelectConfig = async (cfg: Config | null) => {
     const content = await pending
     configContentCache.set(cfgId, content)
     if (selectedConfigId.value === cfgId) {
+      selectedConfigContent.value = content
       newConfigContent.value = content
     }
   } catch (e) {
@@ -542,6 +544,9 @@ const configRowClassName = ({ row }: { row: Config }) => {
 }
 .group-config-area :deep(.el-textarea__inner) {
   min-height: 220px;
+}
+.group-config-area :deep(.config-content-dirty .el-textarea__inner) {
+  color: #e6a23c;
 }
 .config-history {
   min-width: 260px;
