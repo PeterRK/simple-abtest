@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"net/http"
 
@@ -89,11 +90,11 @@ func lyrGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		Segment []segSummary `json:"segment"`
 	}{}
 	resp.Id = id
-	if !withTx(logger, w, &sql.TxOptions{
+	if !withTx(r.Context(), logger, w, &sql.TxOptions{
 		Isolation: sql.LevelRepeatableRead,
 		ReadOnly:  true,
-	}, func(tx *sql.Tx) int {
-		err := tx.Stmt(lyrSql.getOne).QueryRow(id).Scan(&resp.Name, &resp.Version)
+	}, func(ctx context.Context, tx *sql.Tx) int {
+		err := tx.Stmt(lyrSql.getOne).QueryRowContext(ctx, id).Scan(&resp.Name, &resp.Version)
 		if err != nil {
 			if err == sql.ErrNoRows {
 				return http.StatusNotFound
@@ -103,7 +104,7 @@ func lyrGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		}
 
 		return queryRows(logger, "seg.getList",
-			func() (*sql.Rows, error) { return tx.Stmt(segSql.getList).Query(resp.Id) },
+			func() (*sql.Rows, error) { return tx.Stmt(segSql.getList).QueryContext(ctx, resp.Id) },
 			func(rows *sql.Rows) error {
 				var seg segSummary
 				if err := rows.Scan(&seg.Id, &seg.Begin, &seg.End, &seg.Version); err != nil {
@@ -119,12 +120,12 @@ func lyrGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
 }
 
-func createLayer(logger *utils.ContextLogger, tx *sql.Tx, expId uint32, name string) (uint32, error) {
-	id, err := utils.SqlCreate(tx.Stmt(lyrSql.create), expId, name)
+func createLayer(ctx context.Context, logger *utils.ContextLogger, tx *sql.Tx, expId uint32, name string) (uint32, error) {
+	id, err := utils.SqlCreate(ctx, tx.Stmt(lyrSql.create), expId, name)
 	if err != nil {
 		logger.Errorf("fail to run sql[lyr.create]: %v", err)
 	} else {
-		_, err = createDefaultSegment(logger, tx, uint32(id))
+		_, err = createDefaultSegment(ctx, logger, tx, uint32(id))
 	}
 	return uint32(id), err
 }
@@ -148,15 +149,15 @@ func lyrCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	var id uint32
-	if !withTx(logger, w, &sql.TxOptions{
+	if !withTx(r.Context(), logger, w, &sql.TxOptions{
 		Isolation: sql.LevelReadUncommitted,
-	}, func(tx *sql.Tx) int {
+	}, func(ctx context.Context, tx *sql.Tx) int {
 		var err error
-		id, err = createLayer(logger, tx, req.ExpId, req.Name)
+		id, err = createLayer(ctx, logger, tx, req.ExpId, req.Name)
 		if err != nil {
 			return http.StatusInternalServerError
 		}
-		return touch(logger, tx.Stmt(expSql.touch), req.ExpId, req.ExpVer, "exp")
+		return touch(ctx, logger, tx.Stmt(expSql.touch), req.ExpId, req.ExpVer, "exp")
 	}) {
 		return
 	}
@@ -188,7 +189,7 @@ func lyrUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 	req.Id = id
 
-	n, err := utils.SqlModify(lyrSql.update, req.Name,
+	n, err := utils.SqlModify(r.Context(), lyrSql.update, req.Name,
 		req.Version+1, req.Id, req.Version)
 	if err != nil {
 		logger.Errorf("fail to run sql[lyr.update]: %v", err)
@@ -220,10 +221,10 @@ func lyrDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	if !withTx(logger, w, &sql.TxOptions{
+	if !withTx(r.Context(), logger, w, &sql.TxOptions{
 		Isolation: sql.LevelReadUncommitted,
-	}, func(tx *sql.Tx) int {
-		n, err := utils.SqlModify(tx.Stmt(lyrSql.remove), id, req.ExpId, req.Version)
+	}, func(ctx context.Context, tx *sql.Tx) int {
+		n, err := utils.SqlModify(ctx, tx.Stmt(lyrSql.remove), id, req.ExpId, req.Version)
 		if err != nil {
 			logger.Errorf("fail to run sql[lyr.remove]: %v", err)
 			return http.StatusInternalServerError
@@ -232,7 +233,7 @@ func lyrDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 			logger.Warnf("operation conflict: %d", id)
 			return http.StatusConflict
 		}
-		return touch(logger, tx.Stmt(expSql.touch), req.ExpId, req.ExpVer, "exp")
+		return touch(ctx, logger, tx.Stmt(expSql.touch), req.ExpId, req.ExpVer, "exp")
 	}) {
 		return
 	}
@@ -277,7 +278,7 @@ func lyrRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	segment := make([]segSummary, 0, len(req.Segment))
 	if code := queryRows(logger, "seg.getList",
-		func() (*sql.Rows, error) { return segSql.getList.Query(id) },
+		func() (*sql.Rows, error) { return segSql.getList.QueryContext(r.Context(), id) },
 		func(rows *sql.Rows) error {
 			var seg segSummary
 			if err := rows.Scan(&seg.Id, &seg.Begin, &seg.End, &seg.Version); err != nil {
@@ -300,12 +301,12 @@ func lyrRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		}
 	}
 
-	if !withTx(logger, w, &sql.TxOptions{
+	if !withTx(r.Context(), logger, w, &sql.TxOptions{
 		Isolation: sql.LevelReadUncommitted,
-	}, func(tx *sql.Tx) int {
+	}, func(ctx context.Context, tx *sql.Tx) int {
 		for i := 0; i < len(req.Segment); i++ {
 			seg := &req.Segment[i]
-			n, err := utils.SqlModify(tx.Stmt(segSql.adjust), seg.Begin, seg.End, seg.Id)
+			n, err := utils.SqlModify(ctx, tx.Stmt(segSql.adjust), seg.Begin, seg.End, seg.Id)
 			if err != nil {
 				logger.Errorf("fail to run sql[seg.adjust]: %v", err)
 				return http.StatusInternalServerError
@@ -315,7 +316,7 @@ func lyrRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 				return http.StatusConflict
 			}
 		}
-		return touch(logger, tx.Stmt(lyrSql.touch), id, req.Version, "lyr")
+		return touch(ctx, logger, tx.Stmt(lyrSql.touch), id, req.Version, "lyr")
 	}) {
 		return
 	}

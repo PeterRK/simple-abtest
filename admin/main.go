@@ -149,5 +149,8 @@ func prepareSqls() error {
 	if err := prepareUserSql(db); err != nil {
 		return err
 	}
+	if err := prepareAuthSql(db); err != nil {
+		return err
+	}
 	return nil
 }

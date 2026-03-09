@@ -17,8 +17,8 @@ func IsMysqlDuplicateError(err error) bool {
 }
 
 // SqlCreate executes an INSERT statement and returns the last inserted ID.
-func SqlCreate(stmt *sql.Stmt, args ...any) (int64, error) {
-	result, err := stmt.Exec(args...)
+func SqlCreate(ctx context.Context, stmt *sql.Stmt, args ...any) (int64, error) {
+	result, err := stmt.ExecContext(ctx, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -26,16 +26,7 @@ func SqlCreate(stmt *sql.Stmt, args ...any) (int64, error) {
 }
 
 // SqlModify executes an UPDATE/DELETE statement and returns rows affected.
-func SqlModify(stmt *sql.Stmt, args ...any) (int64, error) {
-	result, err := stmt.Exec(args...)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
-// SqlModifyContext is SqlModify with a context for cancellation.
-func SqlModifyContext(ctx context.Context, stmt *sql.Stmt, args ...any) (int64, error) {
+func SqlModify(ctx context.Context, stmt *sql.Stmt, args ...any) (int64, error) {
 	result, err := stmt.ExecContext(ctx, args...)
 	if err != nil {
 		return 0, err

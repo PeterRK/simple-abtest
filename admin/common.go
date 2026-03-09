@@ -28,10 +28,10 @@ func getJsonArgs(logger *utils.ContextLogger, w http.ResponseWriter, r *http.Req
 }
 
 func withTx(
-	logger *utils.ContextLogger, w http.ResponseWriter, opts *sql.TxOptions,
-	fn func(tx *sql.Tx) int,
+	ctx context.Context, logger *utils.ContextLogger, w http.ResponseWriter,
+	opts *sql.TxOptions, fn func(context.Context, *sql.Tx) int,
 ) bool {
-	tx, err := db.BeginTx(context.Background(), opts)
+	tx, err := db.BeginTx(ctx, opts)
 	if err != nil {
 		logger.Errorf("fail to start transaction: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -39,7 +39,7 @@ func withTx(
 	}
 	defer tx.Rollback()
 
-	code := fn(tx)
+	code := fn(ctx, tx)
 	if code != http.StatusOK {
 		w.WriteHeader(code)
 		return false
@@ -53,8 +53,10 @@ func withTx(
 	return true
 }
 
-func touch(logger *utils.ContextLogger, stmt *sql.Stmt, id, version uint32, hint string) int {
-	n, err := utils.SqlModify(stmt, version+1, id, version)
+func touch(ctx context.Context, logger *utils.ContextLogger, stmt *sql.Stmt,
+	id, version uint32, hint string,
+) int {
+	n, err := utils.SqlModify(ctx, stmt, version+1, id, version)
 	if err != nil {
 		logger.Errorf("fail to run sql[%s.touch]: %v", hint, err)
 		return http.StatusInternalServerError
@@ -68,8 +70,7 @@ func touch(logger *utils.ContextLogger, stmt *sql.Stmt, id, version uint32, hint
 
 func queryRows(
 	logger *utils.ContextLogger, hint string,
-	query func() (*sql.Rows, error),
-	scan func(*sql.Rows) error,
+	query func() (*sql.Rows, error), scan func(*sql.Rows) error,
 ) int {
 	rows, err := query()
 	if err != nil {

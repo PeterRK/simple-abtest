@@ -1,21 +1,16 @@
 package main
 
 import (
-	"context"
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/subtle"
 	"database/sql"
 	"fmt"
 	"net/http"
-	"strconv"
-	"sync"
-	"time"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/peterrk/simple-abtest/utils"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/redis/go-redis/v9"
 )
 
 var userSql struct {
@@ -35,19 +30,7 @@ var privSql struct {
 	getListByUid *sql.Stmt
 	getOne       *sql.Stmt
 	getUidByName *sql.Stmt
-
-	getExpApp *sql.Stmt
-	getLyrExp *sql.Stmt
-	getSegLyr *sql.Stmt
-	getGrpSeg *sql.Stmt
 }
-
-const (
-	sessionTTL        = 30 * time.Minute
-	privilegeCacheTTL = 10 * time.Minute
-)
-
-type privilegeLevel uint8
 
 func prepareUserSql(db *sql.DB) (err error) {
 	userSql.create, err = db.Prepare(
@@ -118,31 +101,6 @@ func prepareUserSql(db *sql.DB) (err error) {
 	if err != nil {
 		return err
 	}
-
-	privSql.getExpApp, err = db.Prepare(
-		"SELECT `app_id` FROM `experiment` WHERE `exp_id`=?")
-	if err != nil {
-		return err
-	}
-	privSql.getLyrExp, err = db.Prepare(
-		"SELECT `exp_id` FROM `exp_layer` WHERE `lyr_id`=?")
-	if err != nil {
-		return err
-	}
-	privSql.getSegLyr, err = db.Prepare(
-		"SELECT `lyr_id` FROM `exp_segment` WHERE `seg_id`=?")
-	if err != nil {
-		return err
-	}
-	privSql.getGrpSeg, err = db.Prepare(
-		"SELECT `seg_id` FROM `exp_group` WHERE `grp_id`=?")
-	if err != nil {
-		return err
-	}
-	relationCache.expToApp = make(map[uint32]uint32)
-	relationCache.lyrToExp = make(map[uint32]uint32)
-	relationCache.segToLyr = make(map[uint32]uint32)
-	relationCache.grpToSeg = make(map[uint32]uint32)
 	return nil
 }
 
@@ -155,6 +113,8 @@ func bindUserOp(router *httprouter.Router, registry *prometheus.Registry) {
 	router.Handle(http.MethodPost, "/api/app/:id/privilege", appGrantPrivilege)
 	router.Handle(http.MethodGet, "/api/app/:id/privilege", appGetPrivilege)
 }
+
+type privilegeLevel uint8
 
 const (
 	privilegeNoAccess  privilegeLevel = 0
@@ -183,190 +143,6 @@ func hashPassword(password string, salt []byte) [32]byte {
 	return sum
 }
 
-func issueSession(uid uint32) (string, error) {
-	token, err := utils.GenRandomToken()
-	if err != nil {
-		return "", err
-	}
-	if err := rds.Set(context.Background(), makeSessionKey(uid),
-		token, sessionTTL).Err(); err != nil {
-		return "", err
-	}
-	return token, nil
-}
-
-func verifySession(logger *utils.ContextLogger, w http.ResponseWriter, r *http.Request) (uint32, bool) {
-	uidText := r.Header.Get("SESSION_UID")
-	token := r.Header.Get("SESSION_TOKEN")
-	if len(uidText) == 0 || len(token) == 0 {
-		w.WriteHeader(http.StatusUnauthorized)
-		return 0, false
-	}
-
-	uid64, err := strconv.ParseUint(uidText, 10, 32)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return 0, false
-	}
-	uid := uint32(uid64)
-
-	ctx := context.Background()
-	key := makeSessionKey(uid)
-	cached, err := rds.Get(ctx, key).Result()
-	if err != nil {
-		if err == redis.Nil {
-			w.WriteHeader(http.StatusUnauthorized)
-		} else {
-			logger.Errorf("fail to get session token in redis: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-		}
-		return 0, false
-	}
-	if subtle.ConstantTimeCompare([]byte(cached), []byte(token)) != 1 {
-		w.WriteHeader(http.StatusUnauthorized)
-		return 0, false
-	}
-	if err := rds.Expire(ctx, key, sessionTTL).Err(); err != nil {
-		logger.Errorf("fail to renew session token in redis: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return 0, false
-	}
-	return uid, true
-}
-
-func checkAppPrivilege(uid, appId uint32, expected privilegeLevel) (bool, error) {
-	level, err := getPrivilege(uid, appId)
-	if err != nil {
-		return false, err
-	}
-	return level >= expected, nil
-}
-
-// Because relationship between application, layer, segment, group, config is immutable,
-// cache this relation in memeory. This data will not be too big
-var relationCache struct {
-	lock     sync.RWMutex
-	expToApp map[uint32]uint32
-	lyrToExp map[uint32]uint32
-	segToLyr map[uint32]uint32
-	grpToSeg map[uint32]uint32
-}
-
-func resolveCachedRelation(cache map[uint32]uint32, key uint32, stmt *sql.Stmt) (uint32, bool, error) {
-	relationCache.lock.RLock()
-	val, ok := cache[key]
-	relationCache.lock.RUnlock()
-	if ok {
-		return val, true, nil
-	}
-
-	if err := stmt.QueryRow(key).Scan(&val); err != nil {
-		if err == sql.ErrNoRows {
-			return 0, false, nil
-		}
-		return 0, false, err
-	}
-
-	relationCache.lock.Lock()
-	cache[key] = val
-	relationCache.lock.Unlock()
-	return val, true, nil
-}
-
-func resolveAppByExp(expId uint32) (uint32, bool, error) {
-	return resolveCachedRelation(relationCache.expToApp, expId, privSql.getExpApp)
-}
-
-func resolveExpByLyr(lyrId uint32) (uint32, bool, error) {
-	return resolveCachedRelation(relationCache.lyrToExp, lyrId, privSql.getLyrExp)
-}
-
-func resolveLyrBySeg(segId uint32) (uint32, bool, error) {
-	return resolveCachedRelation(relationCache.segToLyr, segId, privSql.getSegLyr)
-}
-
-func resolveSegByGrp(grpId uint32) (uint32, bool, error) {
-	return resolveCachedRelation(relationCache.grpToSeg, grpId, privSql.getGrpSeg)
-}
-
-func checkExpPrivilege(uid, expId uint32, expected privilegeLevel) (bool, error) {
-	appId, ok, err := resolveAppByExp(expId)
-	if err != nil {
-		return false, err
-	}
-	if !ok {
-		return false, nil
-	}
-	return checkAppPrivilege(uid, appId, expected)
-}
-
-func checkLyrPrivilege(uid, lyrId uint32, expected privilegeLevel) (bool, error) {
-	expId, ok, err := resolveExpByLyr(lyrId)
-	if err != nil {
-		return false, err
-	}
-	if !ok {
-		return false, nil
-	}
-	return checkExpPrivilege(uid, expId, expected)
-}
-
-func checkSegPrivilege(uid, segId uint32, expected privilegeLevel) (bool, error) {
-	lyrId, ok, err := resolveLyrBySeg(segId)
-	if err != nil {
-		return false, err
-	}
-	if !ok {
-		return false, nil
-	}
-	return checkLyrPrivilege(uid, lyrId, expected)
-}
-
-func checkGrpPrivilege(uid, grpId uint32, expected privilegeLevel) (bool, error) {
-	segId, ok, err := resolveSegByGrp(grpId)
-	if err != nil {
-		return false, err
-	}
-	if !ok {
-		return false, nil
-	}
-	return checkSegPrivilege(uid, segId, expected)
-}
-
-func getPrivilege(uid, appId uint32) (privilegeLevel, error) {
-	ctx := context.Background()
-	key := makePrivilegeKey(uid)
-	field := strconv.FormatUint(uint64(appId), 10)
-
-	if txt, err := rds.HGet(ctx, key, field).Result(); err == nil {
-		level, convErr := strconv.Atoi(txt)
-		if convErr == nil {
-			return privilegeLevel(level), nil
-		}
-	} else if err != redis.Nil {
-		utils.GetLogger().Warnf("fail to get privilege cache for uid=%d app_id=%d: %v", uid, appId, err)
-	}
-
-	level := int(privilegeNoAccess)
-	err := privSql.getOne.QueryRow(uid, appId).Scan(&level)
-	if err != nil {
-		if err != sql.ErrNoRows {
-			return 0, err
-		}
-		err = nil
-		level = int(privilegeNoAccess)
-	}
-
-	pipe := rds.Pipeline()
-	pipe.HSet(ctx, key, field, strconv.Itoa(level))
-	pipe.Expire(ctx, key, privilegeCacheTTL)
-	if _, cacheErr := pipe.Exec(ctx); cacheErr != nil {
-		utils.GetLogger().Warnf("fail to set privilege cache for uid=%d app_id=%d: %v", uid, appId, cacheErr)
-	}
-
-	return privilegeLevel(level), nil
-}
-
 func userCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	logger := utils.NewContextLogger("userCreate")
 	req := &struct {
@@ -389,7 +165,7 @@ func userCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 	digest := hashPassword(req.Password, salt)
 
-	id, err := utils.SqlCreate(userSql.create, req.Name, salt, digest[:])
+	id, err := utils.SqlCreate(r.Context(), userSql.create, req.Name, salt, digest[:])
 	if err != nil {
 		if utils.IsMysqlDuplicateError(err) {
 			w.WriteHeader(http.StatusConflict)
@@ -401,9 +177,9 @@ func userCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	uid := uint32(id)
-	token, err := issueSession(uid)
+	token, err := initSession(r.Context(), uid)
 	if err != nil {
-		logger.Errorf("fail to issue session token: %v", err)
+		logger.Errorf("fail to init session token: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -432,7 +208,7 @@ func userLogin(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		salt     []byte
 		password []byte
 	)
-	err := userSql.getByName.QueryRow(req.Name).Scan(&uid, &salt, &password)
+	err := userSql.getByName.QueryRowContext(r.Context(), req.Name).Scan(&uid, &salt, &password)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			w.WriteHeader(http.StatusUnauthorized)
@@ -444,14 +220,14 @@ func userLogin(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	digest := hashPassword(req.Password, salt)
-	if subtle.ConstantTimeCompare(digest[:], password) != 1 {
+	if !bytes.Equal(digest[:], password) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
-	token, err := issueSession(uid)
+	token, err := initSession(r.Context(), uid)
 	if err != nil {
-		logger.Errorf("fail to issue session token: %v", err)
+		logger.Errorf("fail to init session token: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -484,7 +260,7 @@ func userUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	var salt []byte
-	err := userSql.getSalt.QueryRow(target).Scan(&salt)
+	err := userSql.getSalt.QueryRowContext(r.Context(), target).Scan(&salt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			w.WriteHeader(http.StatusNotFound)
@@ -496,7 +272,7 @@ func userUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	digest := hashPassword(req.Password, salt)
-	n, err := utils.SqlModify(userSql.update, digest[:], target)
+	n, err := utils.SqlModify(r.Context(), userSql.update, digest[:], target)
 	if err != nil {
 		logger.Errorf("fail to run sql[user.update]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -519,7 +295,7 @@ func userDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	n, err := utils.SqlModify(userSql.remove, target)
+	n, err := utils.SqlModify(r.Context(), userSql.remove, target)
 	if err != nil {
 		logger.Errorf("fail to run sql[user.remove]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -528,14 +304,6 @@ func userDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	if n == 0 {
 		w.WriteHeader(http.StatusNotFound)
 		return
-	}
-
-	ctx := context.Background()
-	if err := rds.Del(ctx, makeSessionKey(target)).Err(); err != nil {
-		logger.Warnf("fail to clear session cache: %v", err)
-	}
-	if err := rds.Del(ctx, makePrivilegeKey(target)).Err(); err != nil {
-		logger.Warnf("fail to clear privilege cache: %v", err)
 	}
 }
 
@@ -557,7 +325,7 @@ func appGetPrivilege(w http.ResponseWriter, r *http.Request, p httprouter.Params
 
 	resp := make([]appPrivilege, 0)
 	code := queryRows(logger, "priv.getListByApp",
-		func() (*sql.Rows, error) { return privSql.getListByApp.Query(appId) },
+		func() (*sql.Rows, error) { return privSql.getListByApp.QueryContext(r.Context(), appId) },
 		func(rows *sql.Rows) error {
 			var rec appPrivilege
 			if err := rows.Scan(&rec.Name, &rec.Privilege, &rec.Grantor); err != nil {
@@ -579,7 +347,7 @@ func appGrantPrivilege(w http.ResponseWriter, r *http.Request, p httprouter.Para
 	if !ok {
 		return
 	}
-	grantBy, ok := requireSession(logger, w, r)
+	self, ok := requireSession(logger, w, r)
 	if !ok {
 		return
 	}
@@ -597,7 +365,7 @@ func appGrantPrivilege(w http.ResponseWriter, r *http.Request, p httprouter.Para
 		return
 	}
 
-	allowed, err := checkAppPrivilege(grantBy, appId, privilegeAdmin)
+	allowed, err := checkAppPrivilege(r.Context(), self, appId, privilegeAdmin)
 	if err != nil {
 		logger.Errorf("fail to check privilege: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -608,8 +376,8 @@ func appGrantPrivilege(w http.ResponseWriter, r *http.Request, p httprouter.Para
 		return
 	}
 
-	var targetUid uint32
-	err = privSql.getUidByName.QueryRow(req.Name).Scan(&targetUid)
+	var target uint32
+	err = privSql.getUidByName.QueryRowContext(r.Context(), req.Name).Scan(&target)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			w.WriteHeader(http.StatusNotFound)
@@ -621,23 +389,22 @@ func appGrantPrivilege(w http.ResponseWriter, r *http.Request, p httprouter.Para
 	}
 
 	if req.Privilege == int(privilegeNoAccess) {
-		if _, err := utils.SqlModify(privSql.remove, targetUid, appId); err != nil {
+		if _, err := utils.SqlModify(r.Context(), privSql.remove, target, appId); err != nil {
 			logger.Errorf("fail to run sql[priv.remove]: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 	} else {
-		if _, err := utils.SqlModify(privSql.update,
-			targetUid, appId, req.Privilege, grantBy,
-			req.Privilege, grantBy); err != nil {
+		if _, err := utils.SqlModify(r.Context(), privSql.update,
+			target, appId, req.Privilege, self,
+			req.Privilege, self); err != nil {
 			logger.Errorf("fail to run sql[priv.update]: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 	}
 
-	ctx := context.Background()
-	if err := rds.Del(ctx, makePrivilegeKey(targetUid)).Err(); err != nil {
+	if err := rds.Del(r.Context(), makePrivilegeKey(target)).Err(); err != nil {
 		logger.Warnf("fail to clear privilege cache: %v", err)
 	}
 }

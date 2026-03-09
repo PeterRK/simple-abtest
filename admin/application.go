@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"net/http"
 
@@ -87,7 +88,7 @@ func appGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	resp := make([]appSummary, 0)
 	code := queryRows(logger, "app.getList",
-		func() (*sql.Rows, error) { return appSql.getList.Query(uid) },
+		func() (*sql.Rows, error) { return appSql.getList.QueryContext(r.Context(), uid) },
 		func(rows *sql.Rows) error {
 			var rec appSummary
 			if err := rows.Scan(&rec.Id, &rec.Name, &rec.AccessToken); err != nil {
@@ -118,11 +119,11 @@ func appGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		Experiment []expSummary `json:"experiment,omitempty"`
 	}{}
 	resp.Id = id
-	if !withTx(logger, w, &sql.TxOptions{
+	if !withTx(r.Context(), logger, w, &sql.TxOptions{
 		Isolation: sql.LevelRepeatableRead,
 		ReadOnly:  true,
-	}, func(tx *sql.Tx) int {
-		err := tx.Stmt(appSql.getOne).QueryRow(id).Scan(
+	}, func(ctx context.Context, tx *sql.Tx) int {
+		err := tx.Stmt(appSql.getOne).QueryRowContext(ctx, id).Scan(
 			&resp.Name, &resp.Desc, &resp.AccessToken, &resp.Version)
 		if err != nil {
 			if err == sql.ErrNoRows {
@@ -133,7 +134,7 @@ func appGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		}
 
 		return queryRows(logger, "exp.getList",
-			func() (*sql.Rows, error) { return tx.Stmt(expSql.getList).Query(resp.Id) },
+			func() (*sql.Rows, error) { return tx.Stmt(expSql.getList).QueryContext(ctx, resp.Id) },
 			func(rows *sql.Rows) error {
 				var exp expSummary
 				if err := rows.Scan(&exp.Id, &exp.Name, &exp.Desc, &exp.Status, &exp.Version); err != nil {
@@ -171,14 +172,14 @@ func appCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 	var appId uint32
-	if !withTx(logger, w, nil, func(tx *sql.Tx) int {
-		id, err := utils.SqlCreate(tx.Stmt(appSql.create), req.Name, req.Desc, token)
+	if !withTx(r.Context(), logger, w, nil, func(ctx context.Context, tx *sql.Tx) int {
+		id, err := utils.SqlCreate(ctx, tx.Stmt(appSql.create), req.Name, req.Desc, token)
 		if err != nil {
 			logger.Errorf("fail to run sql[app.create]: %v", err)
 			return http.StatusInternalServerError
 		}
 		appId = uint32(id)
-		if _, err = utils.SqlModify(tx.Stmt(privSql.update),
+		if _, err = utils.SqlModify(ctx, tx.Stmt(privSql.update),
 			uid, appId, privilegeAdmin, uid,
 			privilegeAdmin, uid); err != nil {
 			logger.Errorf("fail to run sql[priv.update]: %v", err)
@@ -216,7 +217,7 @@ func appUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 	req.Id = id
 
-	n, err := utils.SqlModify(appSql.update, req.Name, req.Desc,
+	n, err := utils.SqlModify(r.Context(), appSql.update, req.Name, req.Desc,
 		req.Version+1, req.Id, req.Version)
 	if err != nil {
 		logger.Errorf("fail to run sql[app.update]: %v", err)
@@ -247,7 +248,7 @@ func appDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	cnt := 0
-	err := expSql.count.QueryRow(id).Scan(&cnt)
+	err := expSql.count.QueryRowContext(r.Context(), id).Scan(&cnt)
 	if err != nil {
 		logger.Errorf("fail to run sql[exp.count]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -259,7 +260,7 @@ func appDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	n, err := utils.SqlModify(appSql.remove, id, req.Version)
+	n, err := utils.SqlModify(r.Context(), appSql.remove, id, req.Version)
 	if err != nil {
 		logger.Errorf("fail to run sql[app.remove]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)

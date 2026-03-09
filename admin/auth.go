@@ -1,12 +1,243 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"database/sql"
 	"net/http"
+	"strconv"
+	"sync"
+	"time"
 
 	"github.com/peterrk/simple-abtest/utils"
+	"github.com/redis/go-redis/v9"
 )
 
-type privilegeChecker func(uid uint32) (bool, error)
+const (
+	sessionTTL   = 30 * time.Minute
+	privCacheTTL = 10 * time.Minute
+)
+
+var authSql struct {
+	getExpApp *sql.Stmt
+	getLyrExp *sql.Stmt
+	getSegLyr *sql.Stmt
+	getGrpSeg *sql.Stmt
+}
+
+func prepareAuthSql(db *sql.DB) (err error) {
+	authSql.getExpApp, err = db.Prepare(
+		"SELECT `app_id` FROM `experiment` WHERE `exp_id`=?")
+	if err != nil {
+		return err
+	}
+	authSql.getLyrExp, err = db.Prepare(
+		"SELECT `exp_id` FROM `exp_layer` WHERE `lyr_id`=?")
+	if err != nil {
+		return err
+	}
+	authSql.getSegLyr, err = db.Prepare(
+		"SELECT `lyr_id` FROM `exp_segment` WHERE `seg_id`=?")
+	if err != nil {
+		return err
+	}
+	authSql.getGrpSeg, err = db.Prepare(
+		"SELECT `seg_id` FROM `exp_group` WHERE `grp_id`=?")
+	if err != nil {
+		return err
+	}
+	relationCache.expToApp = make(map[uint32]uint32)
+	relationCache.lyrToExp = make(map[uint32]uint32)
+	relationCache.segToLyr = make(map[uint32]uint32)
+	relationCache.grpToSeg = make(map[uint32]uint32)
+	return nil
+}
+
+// Because relationship between application, layer, segment, group, config is immutable,
+// cache this relation in memeory. This data will not be too big
+var relationCache struct {
+	lock     sync.RWMutex
+	expToApp map[uint32]uint32
+	lyrToExp map[uint32]uint32
+	segToLyr map[uint32]uint32
+	grpToSeg map[uint32]uint32
+}
+
+type privilegeChecker func(context.Context, uint32) (bool, error)
+
+func checkAppPrivilege(ctx context.Context, uid, appId uint32, expected privilegeLevel) (bool, error) {
+	level, err := getPrivilege(ctx, uid, appId)
+	if err != nil {
+		return false, err
+	}
+	return level >= expected, nil
+}
+
+func resolveCachedRelation(
+	ctx context.Context, cache map[uint32]uint32, key uint32, stmt *sql.Stmt,
+) (uint32, bool, error) {
+	relationCache.lock.RLock()
+	val, ok := cache[key]
+	relationCache.lock.RUnlock()
+	if ok {
+		return val, true, nil
+	}
+
+	if err := stmt.QueryRowContext(ctx, key).Scan(&val); err != nil {
+		if err == sql.ErrNoRows {
+			return 0, false, nil
+		}
+		return 0, false, err
+	}
+
+	relationCache.lock.Lock()
+	cache[key] = val
+	relationCache.lock.Unlock()
+	return val, true, nil
+}
+
+func resolveAppByExp(ctx context.Context, expId uint32) (uint32, bool, error) {
+	return resolveCachedRelation(ctx, relationCache.expToApp, expId, authSql.getExpApp)
+}
+
+func resolveExpByLyr(ctx context.Context, lyrId uint32) (uint32, bool, error) {
+	return resolveCachedRelation(ctx, relationCache.lyrToExp, lyrId, authSql.getLyrExp)
+}
+
+func resolveLyrBySeg(ctx context.Context, segId uint32) (uint32, bool, error) {
+	return resolveCachedRelation(ctx, relationCache.segToLyr, segId, authSql.getSegLyr)
+}
+
+func resolveSegByGrp(ctx context.Context, grpId uint32) (uint32, bool, error) {
+	return resolveCachedRelation(ctx, relationCache.grpToSeg, grpId, authSql.getGrpSeg)
+}
+
+func checkExpPrivilege(ctx context.Context, uid, expId uint32, expected privilegeLevel) (bool, error) {
+	appId, ok, err := resolveAppByExp(ctx, expId)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		return false, nil
+	}
+	return checkAppPrivilege(ctx, uid, appId, expected)
+}
+
+func checkLyrPrivilege(ctx context.Context, uid, lyrId uint32, expected privilegeLevel) (bool, error) {
+	expId, ok, err := resolveExpByLyr(ctx, lyrId)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		return false, nil
+	}
+	return checkExpPrivilege(ctx, uid, expId, expected)
+}
+
+func checkSegPrivilege(ctx context.Context, uid, segId uint32, expected privilegeLevel) (bool, error) {
+	lyrId, ok, err := resolveLyrBySeg(ctx, segId)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		return false, nil
+	}
+	return checkLyrPrivilege(ctx, uid, lyrId, expected)
+}
+
+func checkGrpPrivilege(ctx context.Context, uid, grpId uint32, expected privilegeLevel) (bool, error) {
+	segId, ok, err := resolveSegByGrp(ctx, grpId)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		return false, nil
+	}
+	return checkSegPrivilege(ctx, uid, segId, expected)
+}
+
+func getPrivilege(ctx context.Context, uid, appId uint32) (privilegeLevel, error) {
+	key := makePrivilegeKey(uid)
+	field := strconv.FormatUint(uint64(appId), 10)
+
+	if txt, err := rds.HGet(ctx, key, field).Result(); err == nil {
+		level, convErr := strconv.Atoi(txt)
+		if convErr == nil {
+			return privilegeLevel(level), nil
+		}
+	} else if err != redis.Nil {
+		utils.GetLogger().Warnf("fail to get privilege cache for uid=%d app_id=%d: %v", uid, appId, err)
+	}
+
+	level := int(privilegeNoAccess)
+	err := privSql.getOne.QueryRowContext(ctx, uid, appId).Scan(&level)
+	if err != nil {
+		if err != sql.ErrNoRows {
+			return 0, err
+		}
+		level = int(privilegeNoAccess)
+	}
+
+	pipe := rds.Pipeline()
+	pipe.HSet(ctx, key, field, strconv.Itoa(level))
+	pipe.Expire(ctx, key, privCacheTTL)
+	if _, cacheErr := pipe.Exec(ctx); cacheErr != nil {
+		utils.GetLogger().Warnf("fail to set privilege cache for uid=%d app_id=%d: %v", uid, appId, cacheErr)
+	}
+
+	return privilegeLevel(level), nil
+}
+
+func initSession(ctx context.Context, uid uint32) (string, error) {
+	token, err := utils.GenRandomToken()
+	if err != nil {
+		return "", err
+	}
+	if err := rds.Set(ctx, makeSessionKey(uid),
+		token, sessionTTL).Err(); err != nil {
+		return "", err
+	}
+	return token, nil
+}
+
+func verifySession(logger *utils.ContextLogger, w http.ResponseWriter, r *http.Request) (uint32, bool) {
+	uidText := r.Header.Get("SESSION_UID")
+	token := r.Header.Get("SESSION_TOKEN")
+	if len(uidText) == 0 || len(token) == 0 {
+		w.WriteHeader(http.StatusUnauthorized)
+		return 0, false
+	}
+
+	uid64, err := strconv.ParseUint(uidText, 10, 32)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return 0, false
+	}
+	uid := uint32(uid64)
+
+	ctx := r.Context()
+	key := makeSessionKey(uid)
+	cached, err := rds.Get(ctx, key).Result()
+	if err != nil {
+		if err == redis.Nil {
+			w.WriteHeader(http.StatusUnauthorized)
+		} else {
+			logger.Errorf("fail to get session token in redis: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+		return 0, false
+	}
+	if !bytes.Equal([]byte(cached), []byte(token)) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return 0, false
+	}
+	if err := rds.Expire(ctx, key, sessionTTL).Err(); err != nil {
+		logger.Errorf("fail to renew session token in redis: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return 0, false
+	}
+	return uid, true
+}
 
 func requireSession(logger *utils.ContextLogger, w http.ResponseWriter, r *http.Request) (uint32, bool) {
 	uid, ok := verifySession(logger, w, r)
@@ -39,7 +270,7 @@ func requirePrivilege(
 		return 0, false
 	}
 
-	allowed, err := checker(uid)
+	allowed, err := checker(r.Context(), uid)
 	if err != nil {
 		logger.Errorf("fail to check privilege: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -56,8 +287,8 @@ func requireAppPrivilege(
 	logger *utils.ContextLogger, w http.ResponseWriter, r *http.Request,
 	appId uint32, expected privilegeLevel,
 ) (uint32, bool) {
-	return requirePrivilege(logger, w, r, func(uid uint32) (bool, error) {
-		return checkAppPrivilege(uid, appId, expected)
+	return requirePrivilege(logger, w, r, func(ctx context.Context, uid uint32) (bool, error) {
+		return checkAppPrivilege(ctx, uid, appId, expected)
 	})
 }
 
@@ -65,8 +296,8 @@ func requireExpPrivilege(
 	logger *utils.ContextLogger, w http.ResponseWriter, r *http.Request,
 	expId uint32, expected privilegeLevel,
 ) (uint32, bool) {
-	return requirePrivilege(logger, w, r, func(uid uint32) (bool, error) {
-		return checkExpPrivilege(uid, expId, expected)
+	return requirePrivilege(logger, w, r, func(ctx context.Context, uid uint32) (bool, error) {
+		return checkExpPrivilege(ctx, uid, expId, expected)
 	})
 }
 
@@ -74,8 +305,8 @@ func requireLyrPrivilege(
 	logger *utils.ContextLogger, w http.ResponseWriter, r *http.Request,
 	lyrId uint32, expected privilegeLevel,
 ) (uint32, bool) {
-	return requirePrivilege(logger, w, r, func(uid uint32) (bool, error) {
-		return checkLyrPrivilege(uid, lyrId, expected)
+	return requirePrivilege(logger, w, r, func(ctx context.Context, uid uint32) (bool, error) {
+		return checkLyrPrivilege(ctx, uid, lyrId, expected)
 	})
 }
 
@@ -83,8 +314,8 @@ func requireSegPrivilege(
 	logger *utils.ContextLogger, w http.ResponseWriter, r *http.Request,
 	segId uint32, expected privilegeLevel,
 ) (uint32, bool) {
-	return requirePrivilege(logger, w, r, func(uid uint32) (bool, error) {
-		return checkSegPrivilege(uid, segId, expected)
+	return requirePrivilege(logger, w, r, func(ctx context.Context, uid uint32) (bool, error) {
+		return checkSegPrivilege(ctx, uid, segId, expected)
 	})
 }
 
@@ -92,7 +323,7 @@ func requireGrpPrivilege(
 	logger *utils.ContextLogger, w http.ResponseWriter, r *http.Request,
 	grpId uint32, expected privilegeLevel,
 ) (uint32, bool) {
-	return requirePrivilege(logger, w, r, func(uid uint32) (bool, error) {
-		return checkGrpPrivilege(uid, grpId, expected)
+	return requirePrivilege(logger, w, r, func(ctx context.Context, uid uint32) (bool, error) {
+		return checkGrpPrivilege(ctx, uid, grpId, expected)
 	})
 }

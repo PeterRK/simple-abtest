@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"math/rand/v2"
 	"net/http"
@@ -95,11 +96,11 @@ func segGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		Group []grpSummary `json:"group,omitempty"`
 	}{}
 	resp.Id = id
-	if !withTx(logger, w, &sql.TxOptions{
+	if !withTx(r.Context(), logger, w, &sql.TxOptions{
 		Isolation: sql.LevelRepeatableRead,
 		ReadOnly:  true,
-	}, func(tx *sql.Tx) int {
-		err := tx.Stmt(segSql.getOne).QueryRow(id).Scan(
+	}, func(ctx context.Context, tx *sql.Tx) int {
+		err := tx.Stmt(segSql.getOne).QueryRowContext(ctx, id).Scan(
 			&resp.Begin, &resp.End, &resp.Version)
 		if err != nil {
 			if err == sql.ErrNoRows {
@@ -110,7 +111,7 @@ func segGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		}
 
 		return queryRows(logger, "grp.getList",
-			func() (*sql.Rows, error) { return tx.Stmt(grpSql.getList).Query(resp.Id) },
+			func() (*sql.Rows, error) { return tx.Stmt(grpSql.getList).QueryContext(ctx, resp.Id) },
 			func(rows *sql.Rows) error {
 				var grp grpSummary
 				if err := rows.Scan(&grp.Id, &grp.Name, &grp.Share, &grp.IsDefault, &grp.Version); err != nil {
@@ -126,12 +127,12 @@ func segGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
 }
 
-func createDefaultSegment(logger *utils.ContextLogger, tx *sql.Tx, lyrId uint32) (uint32, error) {
-	id, err := utils.SqlCreate(tx.Stmt(segSql.create), lyrId, 0, rand.Uint32())
+func createDefaultSegment(ctx context.Context, logger *utils.ContextLogger, tx *sql.Tx, lyrId uint32) (uint32, error) {
+	id, err := utils.SqlCreate(ctx, tx.Stmt(segSql.create), lyrId, 0, rand.Uint32())
 	if err != nil {
 		logger.Errorf("fail to run sql[seg.create]: %v", err)
 	} else {
-		_, err = createDefultGroup(logger, tx, uint32(id))
+		_, err = createDefultGroup(ctx, logger, tx, uint32(id))
 	}
 	return uint32(id), err
 }
@@ -150,10 +151,10 @@ func segCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	var id uint32
-	if !withTx(logger, w, &sql.TxOptions{
+	if !withTx(r.Context(), logger, w, &sql.TxOptions{
 		Isolation: sql.LevelReadUncommitted,
-	}, func(tx *sql.Tx) int {
-		rawID, err := utils.SqlCreate(tx.Stmt(segSql.create),
+	}, func(ctx context.Context, tx *sql.Tx) int {
+		rawID, err := utils.SqlCreate(ctx, tx.Stmt(segSql.create),
 			req.LyrId, 100, rand.Uint32())
 		if err != nil {
 			logger.Errorf("fail to run sql[seg.create]: %v", err)
@@ -161,10 +162,10 @@ func segCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		}
 		id = uint32(rawID)
 
-		if _, err = createDefultGroup(logger, tx, id); err != nil {
+		if _, err = createDefultGroup(ctx, logger, tx, id); err != nil {
 			return http.StatusInternalServerError
 		}
-		return touch(logger, tx.Stmt(lyrSql.touch), req.LyrId, req.LyrVer, "lyr")
+		return touch(ctx, logger, tx.Stmt(lyrSql.touch), req.LyrId, req.LyrVer, "lyr")
 	}) {
 		return
 	}
@@ -196,10 +197,10 @@ func segDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	if !withTx(logger, w, &sql.TxOptions{
+	if !withTx(r.Context(), logger, w, &sql.TxOptions{
 		Isolation: sql.LevelReadUncommitted,
-	}, func(tx *sql.Tx) int {
-		n, err := utils.SqlModify(tx.Stmt(segSql.remove), id, req.LyrId, req.Version)
+	}, func(ctx context.Context, tx *sql.Tx) int {
+		n, err := utils.SqlModify(ctx, tx.Stmt(segSql.remove), id, req.LyrId, req.Version)
 		if err != nil {
 			logger.Errorf("fail to run sql[seg.remove]: %v", err)
 			return http.StatusInternalServerError
@@ -208,7 +209,7 @@ func segDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 			logger.Warnf("operation conflict: %d", id)
 			return http.StatusConflict
 		}
-		return touch(logger, tx.Stmt(lyrSql.touch), req.LyrId, req.LyrVer, "lyr")
+		return touch(ctx, logger, tx.Stmt(lyrSql.touch), req.LyrId, req.LyrVer, "lyr")
 	}) {
 		return
 	}
@@ -224,7 +225,7 @@ func segShuffle(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	n, err := utils.SqlModify(segSql.shuffle, rand.Uint32(), id)
+	n, err := utils.SqlModify(r.Context(), segSql.shuffle, rand.Uint32(), id)
 	if err != nil {
 		logger.Errorf("fail to run sql[seg.shuffle]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -263,7 +264,7 @@ func segRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	var dft, grp part
 	var tmp []byte
 	var err error
-	err = grpSql.getDft.QueryRow(id).Scan(&dftId, &dft.share, &tmp)
+	err = grpSql.getDft.QueryRowContext(r.Context(), id).Scan(&dftId, &dft.share, &tmp)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			w.WriteHeader(http.StatusConflict)
@@ -283,7 +284,7 @@ func segRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	err = grpSql.getMap.QueryRow(req.GrpId, id).Scan(&grp.share, &tmp)
+	err = grpSql.getMap.QueryRowContext(r.Context(), req.GrpId, id).Scan(&grp.share, &tmp)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			w.WriteHeader(http.StatusConflict)
@@ -348,11 +349,11 @@ func segRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		fill(&dft, &grp)
 	}
 
-	if !withTx(logger, w, &sql.TxOptions{
+	if !withTx(r.Context(), logger, w, &sql.TxOptions{
 		Isolation: sql.LevelReadUncommitted,
-	}, func(tx *sql.Tx) int {
+	}, func(ctx context.Context, tx *sql.Tx) int {
 		adjust := func(grpId, share uint32, bitmap []byte) int {
-			n, err := utils.SqlModify(tx.Stmt(grpSql.adjust), share, bitmap[:], grpId)
+			n, err := utils.SqlModify(ctx, tx.Stmt(grpSql.adjust), share, bitmap[:], grpId)
 			if err != nil {
 				logger.Errorf("fail to run sql[grp.adjust]: %v", err)
 				return http.StatusInternalServerError
@@ -371,7 +372,7 @@ func segRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		if code != http.StatusOK {
 			return code
 		}
-		return touch(logger, tx.Stmt(segSql.touch), id, req.Version, "seg")
+		return touch(ctx, logger, tx.Stmt(segSql.touch), id, req.Version, "seg")
 	}) {
 		return
 	}

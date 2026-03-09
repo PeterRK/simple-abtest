@@ -132,8 +132,8 @@ var (
 	errConsistencyLost = errors.New("consistency lost")
 )
 
-func (s *mysqlSource) getApplications(tx *sql.Tx, apps map[uint32]*application) error {
-	rows, err := tx.Stmt(s.stmts.getApp).Query()
+func (s *mysqlSource) getApplications(ctx context.Context, tx *sql.Tx, apps map[uint32]*application) error {
+	rows, err := tx.Stmt(s.stmts.getApp).QueryContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -151,8 +151,10 @@ func (s *mysqlSource) getApplications(tx *sql.Tx, apps map[uint32]*application) 
 	return rows.Err()
 }
 
-func (s *mysqlSource) getExperiment(tx *sql.Tx, apps map[uint32]*application, exps map[uint32]*experiment) error {
-	rows, err := tx.Stmt(s.stmts.getExp).Query()
+func (s *mysqlSource) getExperiment(
+	ctx context.Context, tx *sql.Tx, apps map[uint32]*application, exps map[uint32]*experiment,
+) error {
+	rows, err := tx.Stmt(s.stmts.getExp).QueryContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -175,8 +177,10 @@ func (s *mysqlSource) getExperiment(tx *sql.Tx, apps map[uint32]*application, ex
 	return rows.Err()
 }
 
-func (s *mysqlSource) getLayer(tx *sql.Tx, exps map[uint32]*experiment, lyrs map[uint32]*layer) error {
-	rows, err := tx.Stmt(s.stmts.getLyr).Query()
+func (s *mysqlSource) getLayer(
+	ctx context.Context, tx *sql.Tx, exps map[uint32]*experiment, lyrs map[uint32]*layer,
+) error {
+	rows, err := tx.Stmt(s.stmts.getLyr).QueryContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -199,8 +203,10 @@ func (s *mysqlSource) getLayer(tx *sql.Tx, exps map[uint32]*experiment, lyrs map
 	return rows.Err()
 }
 
-func (s *mysqlSource) getSegment(tx *sql.Tx, lyrs map[uint32]*layer, segs map[uint32]*segment) error {
-	rows, err := tx.Stmt(s.stmts.getSeg).Query()
+func (s *mysqlSource) getSegment(
+	ctx context.Context, tx *sql.Tx, lyrs map[uint32]*layer, segs map[uint32]*segment,
+) error {
+	rows, err := tx.Stmt(s.stmts.getSeg).QueryContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -223,8 +229,10 @@ func (s *mysqlSource) getSegment(tx *sql.Tx, lyrs map[uint32]*layer, segs map[ui
 	return rows.Err()
 }
 
-func (s *mysqlSource) getGroup(tx *sql.Tx, segs map[uint32]*segment, grps map[uint32]*group) error {
-	rows, err := tx.Stmt(s.stmts.getGrp).Query()
+func (s *mysqlSource) getGroup(
+	ctx context.Context, tx *sql.Tx, segs map[uint32]*segment, grps map[uint32]*group,
+) error {
+	rows, err := tx.Stmt(s.stmts.getGrp).QueryContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -269,19 +277,19 @@ func (s *mysqlSource) Fetch(ctx context.Context) (map[uint32]Application, error)
 	}
 	defer tx.Rollback()
 
-	if err := s.getApplications(tx, apps); err != nil {
+	if err := s.getApplications(ctx, tx, apps); err != nil {
 		return nil, fmt.Errorf("fail to run sql[getApp]: %v", err)
 	}
-	if err := s.getExperiment(tx, apps, exps); err != nil {
+	if err := s.getExperiment(ctx, tx, apps, exps); err != nil {
 		return nil, fmt.Errorf("fail to run sql[getExp]: %v", err)
 	}
-	if err := s.getLayer(tx, exps, lyrs); err != nil {
+	if err := s.getLayer(ctx, tx, exps, lyrs); err != nil {
 		return nil, fmt.Errorf("fail to run sql[getLyr]: %v", err)
 	}
-	if err := s.getSegment(tx, lyrs, segs); err != nil {
+	if err := s.getSegment(ctx, tx, lyrs, segs); err != nil {
 		return nil, fmt.Errorf("fail to run sql[getSeg]: %v", err)
 	}
-	if err := s.getGroup(tx, segs, grps); err != nil {
+	if err := s.getGroup(ctx, tx, segs, grps); err != nil {
 		return nil, fmt.Errorf("fail to run sql[getGrp]: %v", err)
 	}
 

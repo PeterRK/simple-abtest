@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"math/rand/v2"
@@ -115,12 +116,12 @@ func expGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		Layer []lyrSummary `json:"layer,omitempty"`
 	}{}
 	resp.Id = id
-	if !withTx(logger, w, &sql.TxOptions{
+	if !withTx(r.Context(), logger, w, &sql.TxOptions{
 		Isolation: sql.LevelRepeatableRead,
 		ReadOnly:  true,
-	}, func(tx *sql.Tx) int {
+	}, func(ctx context.Context, tx *sql.Tx) int {
 		var filter []byte
-		err := tx.Stmt(expSql.getOne).QueryRow(id).Scan(
+		err := tx.Stmt(expSql.getOne).QueryRowContext(ctx, id).Scan(
 			&resp.Name, &resp.Desc, &resp.Status, &filter, &resp.Version)
 		if err != nil {
 			if err == sql.ErrNoRows {
@@ -139,7 +140,7 @@ func expGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		}
 
 		return queryRows(logger, "lyr.getList",
-			func() (*sql.Rows, error) { return tx.Stmt(lyrSql.getList).Query(resp.Id) },
+			func() (*sql.Rows, error) { return tx.Stmt(lyrSql.getList).QueryContext(ctx, resp.Id) },
 			func(rows *sql.Rows) error {
 				var lyr lyrSummary
 				if err := rows.Scan(&lyr.Id, &lyr.Name); err != nil {
@@ -173,10 +174,10 @@ func expCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	var id uint32
-	if !withTx(logger, w, &sql.TxOptions{
+	if !withTx(r.Context(), logger, w, &sql.TxOptions{
 		Isolation: sql.LevelReadUncommitted,
-	}, func(tx *sql.Tx) int {
-		rawID, err := utils.SqlCreate(tx.Stmt(expSql.create),
+	}, func(ctx context.Context, tx *sql.Tx) int {
+		rawID, err := utils.SqlCreate(ctx, tx.Stmt(expSql.create),
 			req.AppId, req.Name, req.Desc, rand.Uint32())
 		if err != nil {
 			logger.Errorf("fail to run sql[exp.create]: %v", err)
@@ -184,10 +185,10 @@ func expCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		}
 		id = uint32(rawID)
 
-		if _, err = createLayer(logger, tx, id, req.Name); err != nil {
+		if _, err = createLayer(ctx, logger, tx, id, req.Name); err != nil {
 			return http.StatusInternalServerError
 		}
-		return touch(logger, tx.Stmt(appSql.touch), req.AppId, req.AppVer, "app")
+		return touch(ctx, logger, tx.Stmt(appSql.touch), req.AppId, req.AppVer, "app")
 	}) {
 		return
 	}
@@ -231,7 +232,7 @@ func expUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	n, err := utils.SqlModify(expSql.update, req.Name, req.Desc, filter,
+	n, err := utils.SqlModify(r.Context(), expSql.update, req.Name, req.Desc, filter,
 		req.Version+1, req.Id, req.Version)
 	if err != nil {
 		logger.Errorf("fail to run sql[exp.update]: %v", err)
@@ -263,10 +264,10 @@ func expDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	if !withTx(logger, w, &sql.TxOptions{
+	if !withTx(r.Context(), logger, w, &sql.TxOptions{
 		Isolation: sql.LevelReadUncommitted,
-	}, func(tx *sql.Tx) int {
-		n, err := utils.SqlModify(tx.Stmt(expSql.remove), id, req.AppId, req.Version)
+	}, func(ctx context.Context, tx *sql.Tx) int {
+		n, err := utils.SqlModify(ctx, tx.Stmt(expSql.remove), id, req.AppId, req.Version)
 		if err != nil {
 			logger.Errorf("fail to run sql[exp.remove]: %v", err)
 			return http.StatusInternalServerError
@@ -275,7 +276,7 @@ func expDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 			logger.Warnf("operation conflict: %d", id)
 			return http.StatusConflict
 		}
-		return touch(logger, tx.Stmt(appSql.touch), req.AppId, req.AppVer, "app")
+		return touch(ctx, logger, tx.Stmt(appSql.touch), req.AppId, req.AppVer, "app")
 	}) {
 		return
 	}
@@ -291,7 +292,7 @@ func expShuffle(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	n, err := utils.SqlModify(expSql.shuffle, rand.Uint32(), id)
+	n, err := utils.SqlModify(r.Context(), expSql.shuffle, rand.Uint32(), id)
 	if err != nil {
 		logger.Errorf("fail to run sql[exp.shuffle]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -325,7 +326,7 @@ func expSwitch(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	n, err := utils.SqlModify(expSql.toggle, req.Status, req.Version+1, id, req.Version)
+	n, err := utils.SqlModify(r.Context(), expSql.toggle, req.Status, req.Version+1, id, req.Version)
 	if err != nil {
 		logger.Errorf("fail to run sql[exp.toggle]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)

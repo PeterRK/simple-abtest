@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"io"
 	"net/http"
@@ -159,7 +160,7 @@ func grpGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	var stamp int64
 	var forceHit string
-	err := grpSql.getOne.QueryRow(id).Scan(&resp.Name,
+	err := grpSql.getOne.QueryRowContext(r.Context(), id).Scan(&resp.Name,
 		&resp.Share, &resp.IsDefault, &forceHit,
 		&resp.Version, &resp.CfgId, &stamp, &resp.Config)
 	if err != nil {
@@ -179,12 +180,12 @@ func grpGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
 }
 
-func createDefultGroup(logger *utils.ContextLogger, tx *sql.Tx, segId uint32) (uint32, error) {
+func createDefultGroup(ctx context.Context, logger *utils.ContextLogger, tx *sql.Tx, segId uint32) (uint32, error) {
 	var bitmap [125]byte
 	for i := 0; i < 125; i++ {
 		bitmap[i] = 0xff
 	}
-	id, err := utils.SqlCreate(tx.Stmt(grpSql.create),
+	id, err := utils.SqlCreate(ctx, tx.Stmt(grpSql.create),
 		segId, "DEFAULT", 1000, bitmap[:], true)
 	if err != nil {
 		logger.Errorf("fail to run sql[grp.create]: %v", err)
@@ -211,18 +212,18 @@ func grpCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	var id uint32
-	if !withTx(logger, w, &sql.TxOptions{
+	if !withTx(r.Context(), logger, w, &sql.TxOptions{
 		Isolation: sql.LevelReadUncommitted,
-	}, func(tx *sql.Tx) int {
+	}, func(ctx context.Context, tx *sql.Tx) int {
 		var bitmap [125]byte //zeros
-		rawID, err := utils.SqlCreate(tx.Stmt(grpSql.create),
+		rawID, err := utils.SqlCreate(ctx, tx.Stmt(grpSql.create),
 			req.SegId, req.Name, 0, bitmap[:], false)
 		if err != nil {
 			logger.Errorf("fail to run sql[grp.create]: %v", err)
 			return http.StatusInternalServerError
 		}
 		id = uint32(rawID)
-		return touch(logger, tx.Stmt(segSql.touch), req.SegId, req.SegVer, "seg")
+		return touch(ctx, logger, tx.Stmt(segSql.touch), req.SegId, req.SegVer, "seg")
 	}) {
 		return
 	}
@@ -257,7 +258,7 @@ func grpUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 	req.Id = id
 
-	n, err := utils.SqlModify(grpSql.update, req.Name,
+	n, err := utils.SqlModify(r.Context(), grpSql.update, req.Name,
 		strings.Join(req.ForceHit, ","), req.CfgId,
 		req.Version+1, req.Id, req.Version)
 	if err != nil {
@@ -290,10 +291,10 @@ func grpDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	if !withTx(logger, w, &sql.TxOptions{
+	if !withTx(r.Context(), logger, w, &sql.TxOptions{
 		Isolation: sql.LevelReadUncommitted,
-	}, func(tx *sql.Tx) int {
-		n, err := utils.SqlModify(tx.Stmt(grpSql.remove), id, req.SegId, req.Version)
+	}, func(ctx context.Context, tx *sql.Tx) int {
+		n, err := utils.SqlModify(ctx, tx.Stmt(grpSql.remove), id, req.SegId, req.Version)
 		if err != nil {
 			logger.Errorf("fail to run sql[grp.remove]: %v", err)
 			return http.StatusInternalServerError
@@ -302,7 +303,7 @@ func grpDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 			logger.Warnf("operation conflict: %d", id)
 			return http.StatusConflict
 		}
-		return touch(logger, tx.Stmt(segSql.touch), req.SegId, req.SegVer, "seg")
+		return touch(ctx, logger, tx.Stmt(segSql.touch), req.SegId, req.SegVer, "seg")
 	}) {
 		return
 	}
@@ -330,7 +331,7 @@ func cfgGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	var resp []cfgSummary
 	code := queryRows(logger, "cfg.getList",
-		func() (*sql.Rows, error) { return cfgSql.getList.Query(grpId, begin) },
+		func() (*sql.Rows, error) { return cfgSql.getList.QueryContext(r.Context(), grpId, begin) },
 		func(rows *sql.Rows) error {
 			var id uint32
 			var stamp int64
@@ -365,7 +366,7 @@ func cfgGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	var content string
-	err := cfgSql.getOne.QueryRow(cfgId, grpId).Scan(&content)
+	err := cfgSql.getOne.QueryRowContext(r.Context(), cfgId, grpId).Scan(&content)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			w.WriteHeader(http.StatusNotFound)
@@ -398,7 +399,7 @@ func cfgCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	stamp := time.Now().Unix()
-	id, err := utils.SqlCreate(cfgSql.create, grpId,
+	id, err := utils.SqlCreate(r.Context(), cfgSql.create, grpId,
 		stamp, utils.UnsafeBytesToString(raw))
 	if err != nil {
 		logger.Errorf("fail to run sql[cfg.create]: %v", err)
