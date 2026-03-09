@@ -1,12 +1,16 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"net/http"
 	"net/http/pprof"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/julienschmidt/httprouter"
@@ -72,7 +76,26 @@ func Main() int {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	experiments, err = source.Fetch(ctx)
+	fetch := func() (map[uint32]*Application, error) {
+		exps, err := source.Fetch(ctx)
+		if err != nil {
+			return nil, err
+		}
+		apps := make(map[uint32]*Application, len(exps))
+		for k, v := range exps {
+			pack, err := toJsonAndZip(&v)
+			if err != nil {
+				return nil, err
+			}
+			apps[k] = &Application{
+				exps: v,
+				pack: pack,
+			}
+		}
+		return apps, nil
+	}
+
+	applications, err = fetch()
 	if err != nil {
 		fmt.Printf("fail to get data: %v\n", err)
 		return -1
@@ -87,7 +110,7 @@ func Main() int {
 		for ctx.Err() == nil {
 			time.Sleep(time.Second * time.Duration(config.IntervalS))
 
-			tmp, err := source.Fetch(ctx)
+			apps, err := fetch()
 			if err != nil {
 				failing = true
 				utils.GetLogger().Errorf("fail to update data: %v", err)
@@ -97,7 +120,7 @@ func Main() int {
 					utils.GetLogger().Info("recover")
 				}
 				failing = false
-				experiments = tmp
+				applications = apps
 			}
 		}
 	}()
@@ -105,10 +128,12 @@ func Main() int {
 	router := httprouter.New()
 	router.Handler(http.MethodGet, "/metrics",
 		promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
-	router.HandlerFunc(http.MethodPost, "/", api)
 	router.HandlerFunc(http.MethodPut, "/loglevel", utils.HttpChangeLogLevel)
 	router.HandlerFunc(http.MethodGet, "/health",
 		func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("OK")) })
+
+	router.Handle(http.MethodPost, "/", abtest)
+	router.Handle(http.MethodGet, "/app/:id", fetchAppInfo)
 
 	if config.Test {
 		router.HandlerFunc(http.MethodGet, "/debug/pprof/", pprof.Index)
@@ -126,11 +151,32 @@ func Main() int {
 	return 0
 }
 
+func toJsonAndZip(obj any) ([]byte, error) {
+	var buf bytes.Buffer
+	zipper, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.NewEncoder(zipper).Encode(obj); err != nil {
+		_ = zipper.Close()
+		return nil, err
+	}
+	if err := zipper.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+type Application struct {
+	exps []core.Experiment
+	pack []byte // gzipped
+}
+
 var (
-	experiments map[uint32][]core.Experiment
+	applications map[uint32]*Application
 )
 
-func api(w http.ResponseWriter, r *http.Request) {
+func abtest(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	req := &struct {
 		AppId   uint32            `json:"appid"`
 		Key     string            `json:"key"`
@@ -144,13 +190,35 @@ func api(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	exps := experiments[req.AppId]
+	app := applications[req.AppId]
+	if app == nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
 
 	resp := &struct {
 		Config map[string]string `json:"config,omitempty"`
 		Tags   []string          `json:"tags,omitempty"`
 	}{}
-	resp.Config, resp.Tags = core.GetExpConfig(exps, req.Key, req.Context)
+	resp.Config, resp.Tags = core.GetExpConfig(app.exps, req.Key, req.Context)
 
 	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
+}
+
+func fetchAppInfo(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	id, err := strconv.ParseUint(p.ByName("id"), 10, 32)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	app := applications[uint32(id)]
+	if app == nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Encoding", "gzip")
+	w.Write(app.pack)
 }

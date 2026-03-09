@@ -98,7 +98,7 @@ func CreateMySQLSource(config string) (Source, error) {
 
 type group struct {
 	name     string
-	bitmap   [125]byte
+	bitmap   []byte
 	config   string
 	forceHit []string
 }
@@ -204,15 +204,13 @@ func (s *mysqlSource) getGroup(tx *sql.Tx, segs map[uint32]*segment, grps map[ui
 	for rows.Next() {
 		var grpId, segId uint32
 		var forceHit string
-		var tmp []byte
 		grp := &group{}
-		err = rows.Scan(&grpId, &segId, &grp.name, &tmp, &forceHit, &grp.config)
+		err = rows.Scan(&grpId, &segId, &grp.name, &grp.bitmap, &forceHit, &grp.config)
 		if err != nil {
 			return err
-		} else if len(tmp) != 125 {
+		} else if len(grp.bitmap) != 125 {
 			return errBrokenData
 		}
-		copy(grp.bitmap[:], tmp)
 		seg := segs[segId]
 		if seg == nil {
 			return errConsistencyLost
@@ -281,7 +279,7 @@ func (s *mysqlSource) Fetch(ctx context.Context) (map[uint32][]core.Experiment, 
 					Name:     lyrX.name,
 					Segments: make([]core.Segment, 0, len(lyrX.segments)),
 				}
-				forceHit := make(map[string][2]int)
+				lyr.ForceHit = make(map[string]core.HitIndex)
 				for _, segId := range lyrX.segments {
 					segX := segs[segId]
 					if segX == nil {
@@ -299,7 +297,10 @@ func (s *mysqlSource) Fetch(ctx context.Context) (map[uint32][]core.Experiment, 
 							return nil, errConsistencyLost
 						}
 						for _, key := range grpX.forceHit {
-							forceHit[key] = [2]int{len(lyr.Segments), len(seg.Groups)}
+							lyr.ForceHit[key] = core.HitIndex{
+								Seg: uint32(len(lyr.Segments)),
+								Grp: uint32(len(seg.Groups)),
+							}
 						}
 						seg.Groups = append(seg.Groups, core.Group{
 							Name:   grpX.name,
@@ -308,12 +309,6 @@ func (s *mysqlSource) Fetch(ctx context.Context) (map[uint32][]core.Experiment, 
 						})
 					}
 					lyr.Segments = append(lyr.Segments, seg)
-				}
-				if len(forceHit) != 0 {
-					lyr.ForceHit = make(map[string]*core.Group, len(forceHit))
-					for key, v := range forceHit {
-						lyr.ForceHit[key] = &lyr.Segments[v[0]].Groups[v[1]]
-					}
 				}
 				exp.Layers = append(exp.Layers, lyr)
 			}

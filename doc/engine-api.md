@@ -33,4 +33,33 @@ Main A/B testing decision API.
 }
 ```
 
-**Errors**: `400` on invalid body or empty key.
+**Errors**
+
+- `400`: invalid JSON body or empty `key`.
+- `404`: `appid` does not exist in engine memory.
+
+### GET `/app/:id`
+
+Get the whole experiment payload for one application.
+
+**Path Params**
+
+- `id` (uint32, required): Application ID.
+
+**Response (200 OK)**
+
+- `Content-Type: application/json`
+- `Content-Encoding: gzip`
+- Body: gzipped JSON, the uncompressed content is the app experiment array (`[]core.Experiment`).
+
+Example:
+
+```bash
+curl -sS http://127.0.0.1:8080/app/1001 --output app.json.gz
+gzip -dc app.json.gz | jq .
+```
+
+**Errors**
+
+- `400`: invalid `id`.
+- `404`: app not found.
