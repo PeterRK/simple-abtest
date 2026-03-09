@@ -259,14 +259,14 @@ func lyrRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	if _, ok := requireLyrPrivilege(logger, w, r, id, privilegeReadWrite); !ok {
 		return
 	}
-	set := make(map[uint32]bool)
+	book := make(map[uint32]uint32)
 	for i := 0; i < len(req.Segment); i++ {
 		seg := &req.Segment[i]
-		if set[seg.Id] || seg.Begin > seg.End {
+		if _, got := book[seg.Id]; got || seg.Begin > seg.End {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		set[seg.Id] = true
+		book[seg.Id] = seg.Version
 	}
 	for i := 1; i < len(req.Segment); i++ {
 		if req.Segment[i].Begin != req.Segment[i-1].End {
@@ -275,37 +275,29 @@ func lyrRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		}
 	}
 
-	rows, err := segSql.getList.Query(id)
-	if err != nil {
-		logger.Errorf("fail to run sql[seg.getList]: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
+	segment := make([]segSummary, 0, len(req.Segment))
+	if code := queryRows(logger, "seg.getList",
+		func() (*sql.Rows, error) { return segSql.getList.Query(id) },
+		func(rows *sql.Rows) error {
+			var seg segSummary
+			if err := rows.Scan(&seg.Id, &seg.Begin, &seg.End, &seg.Version); err != nil {
+				return err
+			}
+			segment = append(segment, seg)
+			return nil
+		}); code != http.StatusOK {
+		w.WriteHeader(code)
 		return
 	}
-	defer rows.Close()
-
-	cnt := 0
-	for rows.Next() {
-		var seg segSummary
-		err := rows.Scan(&seg.Id, &seg.Begin, &seg.End)
-		if err != nil {
-			logger.Errorf("fail to run sql[seg.getList]: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		if !set[seg.Id] {
+	if len(segment) != len(req.Segment) {
+		w.WriteHeader(http.StatusConflict)
+		return
+	}
+	for _, seg := range segment {
+		if ver, got := book[seg.Id]; !got || ver != seg.Version {
 			w.WriteHeader(http.StatusConflict)
 			return
 		}
-		cnt++
-	}
-	if err := rows.Err(); err != nil {
-		logger.Errorf("fail to iterate sql[seg.getList]: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	if cnt != len(req.Segment) {
-		w.WriteHeader(http.StatusConflict)
-		return
 	}
 
 	if !withTx(logger, w, &sql.TxOptions{
