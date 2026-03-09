@@ -84,28 +84,19 @@ func appGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	rows, err := appSql.getList.Query(uid)
-	if err != nil {
-		logger.Errorf("fail to run sql[app.getList]: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
 	resp := make([]appSummary, 0)
-	for rows.Next() {
-		var rec appSummary
-		err := rows.Scan(&rec.Id, &rec.Name)
-		if err != nil {
-			logger.Errorf("fail to run sql[app.getList]: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		resp = append(resp, rec)
-	}
-	if err := rows.Err(); err != nil {
-		logger.Errorf("fail to iterate sql[app.getList]: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
+	code := queryRows(logger, "app.getList",
+		func() (*sql.Rows, error) { return appSql.getList.Query(uid) },
+		func(rows *sql.Rows) error {
+			var rec appSummary
+			if err := rows.Scan(&rec.Id, &rec.Name); err != nil {
+				return err
+			}
+			resp = append(resp, rec)
+			return nil
+		})
+	if code != http.StatusOK {
+		w.WriteHeader(code)
 		return
 	}
 	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, &resp)
@@ -140,27 +131,16 @@ func appGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 			return http.StatusInternalServerError
 		}
 
-		rows, err := tx.Stmt(expSql.getList).Query(resp.Id)
-		if err != nil {
-			logger.Errorf("fail to run sql[exp.getList]: %v", err)
-			return http.StatusInternalServerError
-		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var exp expSummary
-			err = rows.Scan(&exp.Id, &exp.Name, &exp.Desc, &exp.Status, &exp.Version)
-			if err != nil {
-				logger.Errorf("fail to run sql[exp.getList]: %v", err)
-				return http.StatusInternalServerError
-			}
-			resp.Experiment = append(resp.Experiment, exp)
-		}
-		if err = rows.Err(); err != nil {
-			logger.Errorf("fail to iterate sql[exp.getList]: %v", err)
-			return http.StatusInternalServerError
-		}
-		return http.StatusOK
+		return queryRows(logger, "exp.getList",
+			func() (*sql.Rows, error) { return tx.Stmt(expSql.getList).Query(resp.Id) },
+			func(rows *sql.Rows) error {
+				var exp expSummary
+				if err := rows.Scan(&exp.Id, &exp.Name, &exp.Desc, &exp.Status, &exp.Version); err != nil {
+					return err
+				}
+				resp.Experiment = append(resp.Experiment, exp)
+				return nil
+			})
 	}) {
 		return
 	}

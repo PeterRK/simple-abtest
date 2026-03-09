@@ -102,27 +102,16 @@ func lyrGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 			return http.StatusInternalServerError
 		}
 
-		rows, err := tx.Stmt(segSql.getList).Query(resp.Id)
-		if err != nil {
-			logger.Errorf("fail to run sql[seg.getList]: %v", err)
-			return http.StatusInternalServerError
-		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var seg segSummary
-			err = rows.Scan(&seg.Id, &seg.Begin, &seg.End, &seg.Version)
-			if err != nil {
-				logger.Errorf("fail to run sql[seg.getList]: %v", err)
-				return http.StatusInternalServerError
-			}
-			resp.Segment = append(resp.Segment, seg)
-		}
-		if err = rows.Err(); err != nil {
-			logger.Errorf("fail to iterate sql[seg.getList]: %v", err)
-			return http.StatusInternalServerError
-		}
-		return http.StatusOK
+		return queryRows(logger, "seg.getList",
+			func() (*sql.Rows, error) { return tx.Stmt(segSql.getList).Query(resp.Id) },
+			func(rows *sql.Rows) error {
+				var seg segSummary
+				if err := rows.Scan(&seg.Id, &seg.Begin, &seg.End, &seg.Version); err != nil {
+					return err
+				}
+				resp.Segment = append(resp.Segment, seg)
+				return nil
+			})
 	}) {
 		return
 	}

@@ -109,27 +109,16 @@ func segGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 			return http.StatusInternalServerError
 		}
 
-		rows, err := tx.Stmt(grpSql.getList).Query(resp.Id)
-		if err != nil {
-			logger.Errorf("fail to run sql[grp.getList]: %v", err)
-			return http.StatusInternalServerError
-		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var grp grpSummary
-			err = rows.Scan(&grp.Id, &grp.Name, &grp.Share, &grp.IsDefault, &grp.Version)
-			if err != nil {
-				logger.Errorf("fail to run sql[grp.getList]: %v", err)
-				return http.StatusInternalServerError
-			}
-			resp.Group = append(resp.Group, grp)
-		}
-		if err = rows.Err(); err != nil {
-			logger.Errorf("fail to iterate sql[grp.getList]: %v", err)
-			return http.StatusInternalServerError
-		}
-		return http.StatusOK
+		return queryRows(logger, "grp.getList",
+			func() (*sql.Rows, error) { return tx.Stmt(grpSql.getList).Query(resp.Id) },
+			func(rows *sql.Rows) error {
+				var grp grpSummary
+				if err := rows.Scan(&grp.Id, &grp.Name, &grp.Share, &grp.IsDefault, &grp.Version); err != nil {
+					return err
+				}
+				resp.Group = append(resp.Group, grp)
+				return nil
+			})
 	}) {
 		return
 	}

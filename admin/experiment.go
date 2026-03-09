@@ -138,27 +138,16 @@ func expGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 			}
 		}
 
-		rows, err := tx.Stmt(lyrSql.getList).Query(resp.Id)
-		if err != nil {
-			logger.Errorf("fail to run sql[lyr.getList]: %v", err)
-			return http.StatusInternalServerError
-		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var lyr lyrSummary
-			err = rows.Scan(&lyr.Id, &lyr.Name)
-			if err != nil {
-				logger.Errorf("fail to run sql[lyr.getList]: %v", err)
-				return http.StatusInternalServerError
-			}
-			resp.Layer = append(resp.Layer, lyr)
-		}
-		if err = rows.Err(); err != nil {
-			logger.Errorf("fail to iterate sql[lyr.getList]: %v", err)
-			return http.StatusInternalServerError
-		}
-		return http.StatusOK
+		return queryRows(logger, "lyr.getList",
+			func() (*sql.Rows, error) { return tx.Stmt(lyrSql.getList).Query(resp.Id) },
+			func(rows *sql.Rows) error {
+				var lyr lyrSummary
+				if err := rows.Scan(&lyr.Id, &lyr.Name); err != nil {
+					return err
+				}
+				resp.Layer = append(resp.Layer, lyr)
+				return nil
+			})
 	}) {
 		return
 	}

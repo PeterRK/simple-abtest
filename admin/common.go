@@ -65,3 +65,28 @@ func touch(logger *utils.ContextLogger, stmt *sql.Stmt, id, version uint32, hint
 	}
 	return http.StatusOK
 }
+
+func queryRows(
+	logger *utils.ContextLogger, hint string,
+	query func() (*sql.Rows, error),
+	scan func(*sql.Rows) error,
+) int {
+	rows, err := query()
+	if err != nil {
+		logger.Errorf("fail to run sql[%s]: %v", hint, err)
+		return http.StatusInternalServerError
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		if err = scan(rows); err != nil {
+			logger.Errorf("fail to run sql[%s]: %v", hint, err)
+			return http.StatusInternalServerError
+		}
+	}
+	if err = rows.Err(); err != nil {
+		logger.Errorf("fail to iterate sql[%s]: %v", hint, err)
+		return http.StatusInternalServerError
+	}
+	return http.StatusOK
+}

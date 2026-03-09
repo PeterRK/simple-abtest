@@ -557,27 +557,19 @@ func appGetPrivilege(w http.ResponseWriter, r *http.Request, p httprouter.Params
 		return
 	}
 
-	rows, err := privSql.getListByApp.Query(appId)
-	if err != nil {
-		logger.Errorf("fail to run sql[priv.getListByApp]: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
 	resp := make([]appPrivilege, 0)
-	for rows.Next() {
-		var rec appPrivilege
-		if err = rows.Scan(&rec.Name, &rec.Privilege, &rec.Grantor); err != nil {
-			logger.Errorf("fail to run sql[priv.getListByApp]: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		resp = append(resp, rec)
-	}
-	if err = rows.Err(); err != nil {
-		logger.Errorf("fail to iterate sql[priv.getListByApp]: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
+	code := queryRows(logger, "priv.getListByApp",
+		func() (*sql.Rows, error) { return privSql.getListByApp.Query(appId) },
+		func(rows *sql.Rows) error {
+			var rec appPrivilege
+			if err := rows.Scan(&rec.Name, &rec.Privilege, &rec.Grantor); err != nil {
+				return err
+			}
+			resp = append(resp, rec)
+			return nil
+		})
+	if code != http.StatusOK {
+		w.WriteHeader(code)
 		return
 	}
 	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, &resp)

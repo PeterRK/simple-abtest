@@ -328,32 +328,23 @@ func cfgGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		}
 	}
 
-	rows, err := cfgSql.getList.Query(grpId, begin)
-	if err != nil {
-		logger.Errorf("fail to run sql[cfg.getList]: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
 	var resp []cfgSummary
-	for rows.Next() {
-		var id uint32
-		var stamp int64
-		err := rows.Scan(&id, &stamp)
-		if err != nil {
-			logger.Errorf("fail to run sql[cfg.getList]: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		resp = append(resp, cfgSummary{
-			Id:    id,
-			Stamp: stampToStr(stamp),
+	code := queryRows(logger, "cfg.getList",
+		func() (*sql.Rows, error) { return cfgSql.getList.Query(grpId, begin) },
+		func(rows *sql.Rows) error {
+			var id uint32
+			var stamp int64
+			if err := rows.Scan(&id, &stamp); err != nil {
+				return err
+			}
+			resp = append(resp, cfgSummary{
+				Id:    id,
+				Stamp: stampToStr(stamp),
+			})
+			return nil
 		})
-	}
-	if err := rows.Err(); err != nil {
-		logger.Errorf("fail to iterate sql[cfg.getList]: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
+	if code != http.StatusOK {
+		w.WriteHeader(code)
 		return
 	}
 	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, &resp)
