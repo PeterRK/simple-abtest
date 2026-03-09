@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"database/sql"
-	"encoding/hex"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -185,13 +184,12 @@ func hashPassword(password string, salt []byte) [32]byte {
 }
 
 func issueSession(uid uint32) (string, error) {
-	raw := make([]byte, 16)
-	if _, err := rand.Read(raw); err != nil {
+	token, err := utils.GenRandomToken()
+	if err != nil {
 		return "", err
 	}
-	token := hex.EncodeToString(raw)
-	ctx := context.Background()
-	if err := rds.Set(ctx, makeSessionKey(uid), token, sessionTTL).Err(); err != nil {
+	if err := rds.Set(context.Background(), makeSessionKey(uid),
+		token, sessionTTL).Err(); err != nil {
 		return "", err
 	}
 	return token, nil

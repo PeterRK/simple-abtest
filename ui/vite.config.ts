@@ -25,13 +25,11 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        //target: 'http://localhost:8001',
-        target: 'http://172.29.64.1:8001',
+        target: 'http://localhost:8001',
         changeOrigin: true
       },
       '/engine': {
-        //target: 'http://localhost:8080',
-        target: 'http://172.29.64.1:8080',
+        target: 'http://localhost:8080',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/engine/, '')
       }

@@ -91,6 +91,7 @@ const loadExperiments = async () => {
     currentApp.value = {
       id: res.data.id,
       name: res.data.name,
+      access_token: res.data.access_token,
       version: res.data.version,
       description: res.data.description,
       experiment: res.data.experiment
@@ -100,6 +101,7 @@ const loadExperiments = async () => {
     const app = index !== -1 ? apps.value[index] : undefined
     if (app) {
       app.name = res.data.name
+      app.access_token = res.data.access_token
       app.description = res.data.description
       app.version = res.data.version
       app.experiment = res.data.experiment
@@ -146,6 +148,7 @@ const handleCreateApp = async () => {
     currentApp.value = {
       id: created.id,
       name: created.name,
+      access_token: created.access_token,
       version: created.version,
       description: created.description,
       experiment: created.experiment
@@ -326,6 +329,9 @@ watch(
       <el-form :model="appForm">
         <el-form-item v-if="appDialogMode === 'detail' && currentApp" :label="t('common.id')">
           <span>{{ currentApp.id }}</span>
+        </el-form-item>
+        <el-form-item v-if="appDialogMode === 'detail' && currentApp" :label="t('common.accessToken')">
+          <el-input :model-value="currentApp.access_token || ''" readonly />
         </el-form-item>
         <el-form-item :label="t('common.name')">
           <el-input v-model="appForm.name" />

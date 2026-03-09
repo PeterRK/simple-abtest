@@ -22,19 +22,19 @@ func prepareAppSql(db *sql.DB) (err error) {
 	appSql.getList, err = db.Prepare("SELECT t2.* FROM " +
 		"( SELECT `app_id` FROM `privilege` WHERE `uid`=? ) t1 " +
 		"INNER JOIN " +
-		"( SELECT `app_id`,`name` FROM `application` ) t2 " +
+		"( SELECT `app_id`,`name`,`access_token` FROM `application` ) t2 " +
 		"ON t1.app_id = t2.app_id ORDER BY t2.app_id ASC")
 	if err != nil {
 		return err
 	}
 	appSql.getOne, err = db.Prepare(
-		"SELECT `name`,`description`,`version` FROM `application` " +
+		"SELECT `name`,`description`,`access_token`,`version` FROM `application` " +
 			"WHERE `app_id`=?")
 	if err != nil {
 		return err
 	}
 	appSql.create, err = db.Prepare(
-		"INSERT INTO `application`(`name`,`description`) VALUES (?,?)")
+		"INSERT INTO `application`(`name`,`description`,`access_token`) VALUES (?,?,?)")
 	if err != nil {
 		return err
 	}
@@ -67,8 +67,9 @@ func bindAppOp(router *httprouter.Router, registry *prometheus.Registry) {
 }
 
 type appSummary struct {
-	Id   uint32 `json:"id"`
-	Name string `json:"name"`
+	Id          uint32 `json:"id"`
+	Name        string `json:"name"`
+	AccessToken string `json:"access_token"`
 }
 
 type appDetail struct {
@@ -89,7 +90,7 @@ func appGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		func() (*sql.Rows, error) { return appSql.getList.Query(uid) },
 		func(rows *sql.Rows) error {
 			var rec appSummary
-			if err := rows.Scan(&rec.Id, &rec.Name); err != nil {
+			if err := rows.Scan(&rec.Id, &rec.Name, &rec.AccessToken); err != nil {
 				return err
 			}
 			resp = append(resp, rec)
@@ -122,7 +123,7 @@ func appGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		ReadOnly:  true,
 	}, func(tx *sql.Tx) int {
 		err := tx.Stmt(appSql.getOne).QueryRow(id).Scan(
-			&resp.Name, &resp.Desc, &resp.Version)
+			&resp.Name, &resp.Desc, &resp.AccessToken, &resp.Version)
 		if err != nil {
 			if err == sql.ErrNoRows {
 				return http.StatusNotFound
@@ -164,9 +165,14 @@ func appCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
+	token, err := utils.GenRandomToken()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 	var appId uint32
 	if !withTx(logger, w, nil, func(tx *sql.Tx) int {
-		id, err := utils.SqlCreate(tx.Stmt(appSql.create), req.Name, req.Desc)
+		id, err := utils.SqlCreate(tx.Stmt(appSql.create), req.Name, req.Desc, token)
 		if err != nil {
 			logger.Errorf("fail to run sql[app.create]: %v", err)
 			return http.StatusInternalServerError
@@ -185,6 +191,7 @@ func appCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	resp := req
 	resp.Id = appId
+	resp.AccessToken = token
 	resp.Version = 0
 	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
 }

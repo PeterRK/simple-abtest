@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-func fullBitmap() [125]byte {
-	var bitmap [125]byte
+func fullBitmap() []byte {
+	bitmap := make([]byte, 125)
 	for i := 0; i < len(bitmap); i++ {
 		bitmap[i] = 0xff
 	}
@@ -35,28 +35,24 @@ func TestGetExpConfigRichSegment(t *testing.T) {
 		Name: "layer1",
 		Segments: []Segment{
 			{
-				Range: struct {
-					Begin uint32
-					End   uint32
-				}{Begin: 0, End: 50},
 				Seed: 1,
 				Groups: []Group{
 					{Name: "A", Bitmap: fullBitmap(), Config: "cfgA"},
 				},
 			},
 			{
-				Range: struct {
-					Begin uint32
-					End   uint32
-				}{Begin: 50, End: 100},
 				Seed: 2,
 				Groups: []Group{
 					{Name: "B", Bitmap: fullBitmap(), Config: "cfgB"},
 				},
 			},
 		},
-		ForceHit: map[string]*Group{},
+		ForceHit: map[string]HitIndex{},
 	}
+	layer.Segments[0].Range.Begin = 0
+	layer.Segments[0].Range.End = 50
+	layer.Segments[1].Range.Begin = 50
+	layer.Segments[1].Range.End = 100
 	exps := []Experiment{
 		{
 			Seed:   seed,
@@ -83,7 +79,7 @@ func TestGetExpConfigNaiveAndForceHit(t *testing.T) {
 	layer := Layer{
 		Name:     "L1",
 		Segments: []Segment{seg},
-		ForceHit: map[string]*Group{},
+		ForceHit: map[string]HitIndex{},
 	}
 	exps := []Experiment{
 		{
@@ -96,8 +92,12 @@ func TestGetExpConfigNaiveAndForceHit(t *testing.T) {
 		t.FailNow()
 	}
 
-	force := &Group{Name: "F", Config: "cfgForce"}
-	layer.ForceHit["u2"] = force
+	layer.Segments[0].Groups = append(layer.Segments[0].Groups, Group{
+		Name:   "F",
+		Bitmap: fullBitmap(),
+		Config: "cfgForce",
+	})
+	layer.ForceHit["u2"] = HitIndex{Seg: 0, Grp: 1}
 	exps[0].Layers[0] = layer
 
 	cfg, tags = GetExpConfig(exps, "u2", map[string]string{})
@@ -123,7 +123,7 @@ func TestGetExpConfigWithFilter(t *testing.T) {
 				},
 			},
 		},
-		ForceHit: map[string]*Group{},
+		ForceHit: map[string]HitIndex{},
 	}
 	layer2 := Layer{
 		Name: "L2",
@@ -135,7 +135,7 @@ func TestGetExpConfigWithFilter(t *testing.T) {
 				},
 			},
 		},
-		ForceHit: map[string]*Group{},
+		ForceHit: map[string]HitIndex{},
 	}
 
 	exps := []Experiment{

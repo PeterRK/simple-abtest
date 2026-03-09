@@ -15,7 +15,7 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/peterrk/simple-abtest/engine/core"
-	"github.com/peterrk/simple-abtest/engine/db"
+	"github.com/peterrk/simple-abtest/engine/data"
 	"github.com/peterrk/simple-abtest/utils"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -56,7 +56,7 @@ func Main() int {
 		fmt.Println("database is unspecified")
 		return 1
 	}
-	source, err := db.CreateMySQLSource(config.Database)
+	source, err := data.CreateMySQLSource(config.Database)
 	if err != nil {
 		fmt.Printf("fail to prepare data source: %v\n", err)
 		return 1
@@ -83,13 +83,13 @@ func Main() int {
 		}
 		apps := make(map[uint32]*Application, len(exps))
 		for k, v := range exps {
-			pack, err := toJsonAndZip(&v)
+			pack, err := toJsonAndZip(&v.Experiments)
 			if err != nil {
 				return nil, err
 			}
 			apps[k] = &Application{
-				exps: v,
-				pack: pack,
+				Application: v,
+				pack:        pack,
 			}
 		}
 		return apps, nil
@@ -168,7 +168,7 @@ func toJsonAndZip(obj any) ([]byte, error) {
 }
 
 type Application struct {
-	exps []core.Experiment
+	data.Application
 	pack []byte // gzipped
 }
 
@@ -183,7 +183,7 @@ func abtest(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		Context map[string]string `json:"context,omitempty"`
 	}{}
 
-	logger := utils.NewContextLogger("")
+	logger := utils.NewContextLogger("abtest")
 	err := utils.HttpGetJsonArgsWithLog(logger, r, req)
 	if err != nil || len(req.Key) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
@@ -195,12 +195,16 @@ func abtest(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
+	if app.AccessToken != r.Header.Get("ACCESS_TOKEN") {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
 
 	resp := &struct {
 		Config map[string]string `json:"config,omitempty"`
 		Tags   []string          `json:"tags,omitempty"`
 	}{}
-	resp.Config, resp.Tags = core.GetExpConfig(app.exps, req.Key, req.Context)
+	resp.Config, resp.Tags = core.GetExpConfig(app.Experiments, req.Key, req.Context)
 
 	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
 }
@@ -215,6 +219,10 @@ func fetchAppInfo(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	app := applications[uint32(id)]
 	if app == nil {
 		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	if app.AccessToken != r.Header.Get("ACCESS_TOKEN") {
+		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 

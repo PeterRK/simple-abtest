@@ -23,6 +23,7 @@ const messages: Record<Locale, MessageTree> = {
     common: {
       id: 'ID',
       name: '名称',
+      accessToken: 'Access Token',
       description: '描述',
       status: '状态',
       key: 'Key',
@@ -65,6 +66,7 @@ const messages: Record<Locale, MessageTree> = {
       rebalanceFailedRefresh: '调整失败，请手动刷新后重试',
       appVersionMissing: '应用版本缺失',
       appInfoMissing: '无法获取应用信息',
+      appTokenMissing: '应用 Access Token 缺失，请刷新后重试',
       verifyRequired: 'App ID 和 Key 为必填项',
       verifyFailed: '验证失败或 JSON 非法',
       authRequired: '用户名和密码均不能为空',
@@ -150,6 +152,7 @@ const messages: Record<Locale, MessageTree> = {
     verify: {
       title: '在线验证',
       application: '应用',
+      viewAccessToken: '查看 Token',
       key: 'Key',
       context: '上下文',
       selectApp: '选择应用',
@@ -218,6 +221,7 @@ const messages: Record<Locale, MessageTree> = {
     common: {
       id: 'ID',
       name: 'Name',
+      accessToken: 'Access Token',
       description: 'Description',
       status: 'Status',
       key: 'Key',
@@ -260,6 +264,7 @@ const messages: Record<Locale, MessageTree> = {
       rebalanceFailedRefresh: 'Rebalance failed, please refresh and retry',
       appVersionMissing: 'App version is missing',
       appInfoMissing: 'Unable to resolve app info',
+      appTokenMissing: 'App access token is missing. Refresh and retry',
       verifyRequired: 'App ID and Key are required',
       verifyFailed: 'Verification failed or invalid JSON',
       authRequired: 'Both username and password are required',
@@ -345,6 +350,7 @@ const messages: Record<Locale, MessageTree> = {
     verify: {
       title: 'Online Verify',
       application: 'Application',
+      viewAccessToken: 'View Token',
       key: 'Key',
       context: 'Context',
       selectApp: 'Select App',

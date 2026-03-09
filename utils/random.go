@@ -1,5 +1,18 @@
 package utils
 
+import (
+	"crypto/rand"
+	"encoding/base64"
+)
+
+func GenRandomToken() (string, error) {
+	raw := make([]byte, 18)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	return base64.URLEncoding.EncodeToString(raw), nil
+}
+
 // Xorshift implements a simple 32-bit xorshift pseudo-random generator.
 type Xorshift struct {
 	x, y, z, w uint32

@@ -84,7 +84,12 @@ export const getConfig = (grpId: number, cfgId: number) =>
   adminApi.get<string>(`/grp/${grpId}/cfg/${cfgId}`, { responseType: 'text' })
 
 // Engine
-export const verify = (data: { appid: number; key: string; context?: Record<string, string> }) => engineApi.post<{ config: Record<string, string>; tags: string[] }>('/', data)
+export const verify = (data: { appid: number; key: string; context?: Record<string, string> }, accessToken: string) =>
+  engineApi.post<{ config: Record<string, string>; tags: string[] }>('/', data, {
+    headers: {
+      ACCESS_TOKEN: accessToken
+    }
+  })
 
 // Aliases for compatibility with existing components
 export const createLyr = createLayer

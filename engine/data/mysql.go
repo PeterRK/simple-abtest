@@ -1,4 +1,4 @@
-package db
+package data
 
 import (
 	"context"
@@ -11,19 +11,14 @@ import (
 	"github.com/peterrk/simple-abtest/engine/core"
 )
 
-// Source fetches experiment data from a storage backend.
-type Source interface {
-	Fetch(ctx context.Context) (map[uint32][]core.Experiment, error)
-	Close()
-}
-
 type mysqlSource struct {
 	client *sql.DB
 	stmts  struct {
-		getExperiment *sql.Stmt
-		getLayer      *sql.Stmt
-		getSegment    *sql.Stmt
-		getGroup      *sql.Stmt
+		getApp *sql.Stmt
+		getExp *sql.Stmt
+		getLyr *sql.Stmt
+		getSeg *sql.Stmt
+		getGrp *sql.Stmt
 	}
 }
 
@@ -45,14 +40,20 @@ func CreateMySQLSource(config string) (Source, error) {
 	}()
 	s := &mysqlSource{client: client}
 
-	s.stmts.getExperiment, err = s.client.Prepare(
+	s.stmts.getApp, err = s.client.Prepare(
+		"SELECT `app_id`,`access_token` FROM `application`")
+	if err != nil {
+		return nil, err
+	}
+
+	s.stmts.getExp, err = s.client.Prepare(
 		"SELECT `exp_id`,`app_id`,`seed`,`filter` FROM `experiment` " +
 			"WHERE `status` = 1 ORDER BY `exp_id` ASC")
 	if err != nil {
 		return nil, err
 	}
 
-	s.stmts.getLayer, err = s.client.Prepare("SELECT t2.* FROM " +
+	s.stmts.getLyr, err = s.client.Prepare("SELECT t2.* FROM " +
 		"( SELECT `exp_id` FROM `experiment` WHERE `status`=1 ) t1 " +
 		"INNER JOIN " +
 		"( SELECT `lyr_id`,`exp_id`,`name` FROM `exp_layer` ) t2 " +
@@ -61,7 +62,7 @@ func CreateMySQLSource(config string) (Source, error) {
 		return nil, err
 	}
 
-	s.stmts.getSegment, err = s.client.Prepare("SELECT t3.* FROM " +
+	s.stmts.getSeg, err = s.client.Prepare("SELECT t3.* FROM " +
 		"( SELECT `exp_id` FROM `experiment` WHERE `status`=1 ) t1 " +
 		"INNER JOIN " +
 		"( SELECT `lyr_id`,`exp_id` FROM `exp_layer` ) t2 " +
@@ -73,7 +74,7 @@ func CreateMySQLSource(config string) (Source, error) {
 		return nil, err
 	}
 
-	s.stmts.getGroup, err = s.client.Prepare(
+	s.stmts.getGrp, err = s.client.Prepare(
 		"SELECT `grp_id`,t3.seg_id,`name`,`bitmap`,`force_hit`," +
 			"COALESCE(`content`,'') AS `content` FROM " +
 			"( SELECT `exp_id` FROM `experiment` WHERE `status`=1 ) t1 " +
@@ -121,13 +122,37 @@ type experiment struct {
 	layers []uint32
 }
 
+type application struct {
+	token       string
+	experiments []uint32
+}
+
 var (
 	errBrokenData      = errors.New("broken data")
 	errConsistencyLost = errors.New("consistency lost")
 )
 
-func (s *mysqlSource) getExperiment(tx *sql.Tx, apps map[uint32][]uint32, exps map[uint32]*experiment) error {
-	rows, err := tx.Stmt(s.stmts.getExperiment).Query()
+func (s *mysqlSource) getApplications(tx *sql.Tx, apps map[uint32]*application) error {
+	rows, err := tx.Stmt(s.stmts.getApp).Query()
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var appId uint32
+		app := &application{}
+		err = rows.Scan(&appId, &app.token)
+		if err != nil {
+			return err
+		}
+		apps[appId] = app
+	}
+	return rows.Err()
+}
+
+func (s *mysqlSource) getExperiment(tx *sql.Tx, apps map[uint32]*application, exps map[uint32]*experiment) error {
+	rows, err := tx.Stmt(s.stmts.getExp).Query()
 	if err != nil {
 		return err
 	}
@@ -140,14 +165,18 @@ func (s *mysqlSource) getExperiment(tx *sql.Tx, apps map[uint32][]uint32, exps m
 		if err != nil {
 			return err
 		}
-		apps[appId] = append(apps[appId], expId)
+		app := apps[appId]
+		if app == nil {
+			return errConsistencyLost
+		}
+		app.experiments = append(app.experiments, expId)
 		exps[expId] = exp
 	}
 	return rows.Err()
 }
 
 func (s *mysqlSource) getLayer(tx *sql.Tx, exps map[uint32]*experiment, lyrs map[uint32]*layer) error {
-	rows, err := tx.Stmt(s.stmts.getLayer).Query()
+	rows, err := tx.Stmt(s.stmts.getLyr).Query()
 	if err != nil {
 		return err
 	}
@@ -171,7 +200,7 @@ func (s *mysqlSource) getLayer(tx *sql.Tx, exps map[uint32]*experiment, lyrs map
 }
 
 func (s *mysqlSource) getSegment(tx *sql.Tx, lyrs map[uint32]*layer, segs map[uint32]*segment) error {
-	rows, err := tx.Stmt(s.stmts.getSegment).Query()
+	rows, err := tx.Stmt(s.stmts.getSeg).Query()
 	if err != nil {
 		return err
 	}
@@ -195,7 +224,7 @@ func (s *mysqlSource) getSegment(tx *sql.Tx, lyrs map[uint32]*layer, segs map[ui
 }
 
 func (s *mysqlSource) getGroup(tx *sql.Tx, segs map[uint32]*segment, grps map[uint32]*group) error {
-	rows, err := tx.Stmt(s.stmts.getGroup).Query()
+	rows, err := tx.Stmt(s.stmts.getGrp).Query()
 	if err != nil {
 		return err
 	}
@@ -224,8 +253,8 @@ func (s *mysqlSource) getGroup(tx *sql.Tx, segs map[uint32]*segment, grps map[ui
 	return rows.Err()
 }
 
-func (s *mysqlSource) Fetch(ctx context.Context) (map[uint32][]core.Experiment, error) {
-	apps := make(map[uint32][]uint32)
+func (s *mysqlSource) Fetch(ctx context.Context) (map[uint32]Application, error) {
+	apps := make(map[uint32]*application)
 	exps := make(map[uint32]*experiment)
 	lyrs := make(map[uint32]*layer)
 	segs := make(map[uint32]*segment)
@@ -240,24 +269,30 @@ func (s *mysqlSource) Fetch(ctx context.Context) (map[uint32][]core.Experiment, 
 	}
 	defer tx.Rollback()
 
+	if err := s.getApplications(tx, apps); err != nil {
+		return nil, fmt.Errorf("fail to run sql[getApp]: %v", err)
+	}
 	if err := s.getExperiment(tx, apps, exps); err != nil {
-		return nil, fmt.Errorf("fail to run sql[getExperiment]: %v", err)
+		return nil, fmt.Errorf("fail to run sql[getExp]: %v", err)
 	}
 	if err := s.getLayer(tx, exps, lyrs); err != nil {
-		return nil, fmt.Errorf("fail to run sql[getLayer]: %v", err)
+		return nil, fmt.Errorf("fail to run sql[getLyr]: %v", err)
 	}
 	if err := s.getSegment(tx, lyrs, segs); err != nil {
-		return nil, fmt.Errorf("fail to run sql[getSegment]: %v", err)
+		return nil, fmt.Errorf("fail to run sql[getSeg]: %v", err)
 	}
 	if err := s.getGroup(tx, segs, grps); err != nil {
-		return nil, fmt.Errorf("fail to run sql[getGroup]: %v", err)
+		return nil, fmt.Errorf("fail to run sql[getGrp]: %v", err)
 	}
 
-	out := make(map[uint32][]core.Experiment)
+	out := make(map[uint32]Application, len(apps))
 
-	for appId, expIdLst := range apps {
-		expLst := make([]core.Experiment, 0, len(expIdLst))
-		for _, expId := range expIdLst {
+	for appId, appX := range apps {
+		app := Application{
+			AccessToken: appX.token,
+			Experiments: make([]core.Experiment, 0, len(appX.experiments)),
+		}
+		for _, expId := range appX.experiments {
 			expX := exps[expId]
 			if expX == nil {
 				return nil, errConsistencyLost
@@ -312,9 +347,9 @@ func (s *mysqlSource) Fetch(ctx context.Context) (map[uint32][]core.Experiment, 
 				}
 				exp.Layers = append(exp.Layers, lyr)
 			}
-			expLst = append(expLst, exp)
+			app.Experiments = append(app.Experiments, exp)
 		}
-		out[appId] = expLst
+		out[appId] = app
 	}
 
 	return out, nil

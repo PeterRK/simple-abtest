@@ -4,6 +4,10 @@
 
 Main A/B testing decision API.
 
+Required header:
+
+- `ACCESS_TOKEN`: application access token returned by admin APIs
+
 **Request**
 
 ```json
@@ -36,11 +40,16 @@ Main A/B testing decision API.
 **Errors**
 
 - `400`: invalid JSON body or empty `key`.
+- `401`: missing or invalid `ACCESS_TOKEN`.
 - `404`: `appid` does not exist in engine memory.
 
 ### GET `/app/:id`
 
 Get the whole experiment payload for one application.
+
+Required header:
+
+- `ACCESS_TOKEN`: application access token returned by admin APIs
 
 **Path Params**
 
@@ -62,4 +71,5 @@ gzip -dc app.json.gz | jq .
 **Errors**
 
 - `400`: invalid `id`.
+- `401`: missing or invalid `ACCESS_TOKEN`.
 - `404`: app not found.
