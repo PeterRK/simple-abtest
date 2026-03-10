@@ -23,8 +23,11 @@ func newRedisClient(cfg *RedisConfig, ping bool) (*redis.Client, error) {
 	if !ping {
 		return c, nil
 	}
-	err := c.Ping(context.Background()).Err()
-	return c, err
+	if err := c.Ping(context.Background()).Err(); err != nil {
+		c.Close()
+		return nil, err
+	}
+	return c, nil
 }
 
 func NewRedisClient(cfg *RedisConfig) *redis.Client {

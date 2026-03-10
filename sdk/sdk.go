@@ -3,7 +3,6 @@ package sdk
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -15,6 +14,7 @@ import (
 // engine service.
 type Client struct {
 	srcUrl  string
+	token   string
 	client  *http.Client
 	dataPtr *[]core.Experiment
 	stamp   uint32
@@ -24,9 +24,11 @@ type Client struct {
 // NewClient creates an SDK client for one app.
 // It performs an initial synchronous pull from engine `/app/:id`, then starts
 // a background refresh loop. When ttl <= 1 minute, ttl is clamped to 1 minute.
-func NewClient(address string, appid uint32, ttl time.Duration) (*Client, error) {
+func NewClient(address string, appid uint32, accessToken string,
+	ttl time.Duration) (*Client, error) {
 	c := new(Client)
 	c.srcUrl = fmt.Sprintf("%s/app/%d", strings.TrimRight(address, "/"), appid)
+	c.token = accessToken
 	c.client = &http.Client{Timeout: time.Second * 10}
 
 	if err := c.update(); err != nil {
@@ -53,14 +55,19 @@ func (c *Client) Close() {
 
 func (c *Client) update() error {
 	ptr := new([]core.Experiment)
-	resp, err := c.client.Get(c.srcUrl)
+	req, err := http.NewRequest(http.MethodGet, c.srcUrl, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("ACCESS_TOKEN", c.token)
+
+	resp, err := c.client.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		io.Copy(io.Discard, resp.Body)
 		return fmt.Errorf("fetch app info failed: status=%d", resp.StatusCode)
 	}
 

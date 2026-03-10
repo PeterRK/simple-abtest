@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net"
 	"net/http"
 	"os"
@@ -21,7 +22,7 @@ import (
 
 // HttpGetJsonArgs decodes a JSON request body into obj without logging.
 func HttpGetJsonArgs(r *http.Request, obj any) error {
-	defer io.Copy(io.Discard, r.Body)
+	defer r.Body.Close()
 	return json.NewDecoder(r.Body).Decode(obj)
 }
 
@@ -38,6 +39,7 @@ func HttpReplyJson(w http.ResponseWriter, code int, obj any) error {
 
 // HttpGetJsonArgsWithLog decodes a JSON body into obj and logs the raw payload.
 func HttpGetJsonArgsWithLog(logger *ContextLogger, r *http.Request, obj any) error {
+	defer r.Body.Close()
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
 		return err
@@ -71,7 +73,12 @@ var (
 // HttpGetPbArgs reads a protobuf request into m.
 // When Content-Type is application/json it expects JSON, otherwise protobuf wire format.
 func HttpGetPbArgs(r *http.Request, m proto.Message) (bin bool, err error) {
-	bin = r.Header.Get("Content-Type") != "application/json"
+	defer r.Body.Close()
+	contentType := r.Header.Get("Content-Type")
+	if mediaType, _, err := mime.ParseMediaType(contentType); err == nil {
+		contentType = mediaType
+	}
+	bin = contentType != "application/json"
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
 		return bin, err
@@ -205,17 +212,15 @@ func HandleRestfulResponse(resp *http.Response, obj any) (code int, err error) {
 	}
 	defer resp.Body.Close()
 	if obj == nil {
-		io.Copy(io.Discard, resp.Body)
 		return resp.StatusCode, nil
 	}
 	if u, _ := obj.(*[]byte); u != nil {
 		*u, err = io.ReadAll(resp.Body)
 	} else {
-		defer io.Copy(io.Discard, resp.Body)
 		err = json.NewDecoder(resp.Body).Decode(obj)
 	}
 	if err != nil {
-		return 0, err
+		return resp.StatusCode, err
 	}
 	return resp.StatusCode, nil
 }

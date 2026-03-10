@@ -31,6 +31,7 @@ func GetLogger() *zap.SugaredLogger {
 // HttpChangeLogLevel changes the global log level based on the request body.
 // It accepts DEBUG/INFO/WARN/ERROR (case-insensitive).
 func HttpChangeLogLevel(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
