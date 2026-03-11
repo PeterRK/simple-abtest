@@ -146,6 +146,16 @@ func appGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
+	if len(resp.Experiment) > 0 {
+		mark := newIdMark(resp.Id)
+		relationCache.lock.Lock()
+		for i := 0; i < len(resp.Experiment); i++ {
+			expId := resp.Experiment[i].Id
+			relationCache.expToApp[expId] = mark
+		}
+		relationCache.lock.Unlock()
+	}
+
 	utils.HttpReplyJsonWithLog(ctx.ContextLogger, w, http.StatusOK, resp)
 }
 

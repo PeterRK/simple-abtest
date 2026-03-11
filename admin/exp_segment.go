@@ -122,6 +122,15 @@ func segGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}) {
 		return
 	}
+	if len(resp.Group) > 0 {
+		mark := newIdMark(resp.Id)
+		relationCache.lock.Lock()
+		for i := 0; i < len(resp.Group); i++ {
+			grpId := resp.Group[i].Id
+			relationCache.grpToSeg[grpId] = mark
+		}
+		relationCache.lock.Unlock()
+	}
 
 	utils.HttpReplyJsonWithLog(ctx.ContextLogger, w, http.StatusOK, resp)
 }

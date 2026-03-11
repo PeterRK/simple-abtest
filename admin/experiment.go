@@ -152,6 +152,15 @@ func expGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}) {
 		return
 	}
+	if len(resp.Layer) > 0 {
+		mark := newIdMark(resp.Id)
+		relationCache.lock.Lock()
+		for i := 0; i < len(resp.Layer); i++ {
+			lyrId := resp.Layer[i].Id
+			relationCache.lyrToExp[lyrId] = mark
+		}
+		relationCache.lock.Unlock()
+	}
 	utils.HttpReplyJsonWithLog(ctx.ContextLogger, w, http.StatusOK, resp)
 }
 

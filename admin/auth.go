@@ -15,6 +15,7 @@ import (
 const (
 	sessionTTL   = 30 * time.Minute
 	privCacheTTL = 10 * time.Minute
+	relationTTL  = uint32((24*time.Hour)/time.Second) * 7
 )
 
 var authSql struct {
@@ -45,21 +46,49 @@ func prepareAuthSql(db *sql.DB) (err error) {
 	if err != nil {
 		return err
 	}
-	relationCache.expToApp = make(map[uint32]uint32)
-	relationCache.lyrToExp = make(map[uint32]uint32)
-	relationCache.segToLyr = make(map[uint32]uint32)
-	relationCache.grpToSeg = make(map[uint32]uint32)
+	relationCache.expToApp = make(map[uint32]idMark)
+	relationCache.lyrToExp = make(map[uint32]idMark)
+	relationCache.segToLyr = make(map[uint32]idMark)
+	relationCache.grpToSeg = make(map[uint32]idMark)
 	return nil
+}
+
+type idMark struct {
+	id    uint32
+	stamp uint32
+}
+
+func newIdMark(id uint32) idMark {
+	return idMark{id: id, stamp: uint32(time.Now().Unix())}
 }
 
 // Because relationship between application, layer, segment, group, config is immutable,
 // cache this relation in memeory. This data will not be too big
 var relationCache struct {
-	lock     sync.RWMutex
-	expToApp map[uint32]uint32
-	lyrToExp map[uint32]uint32
-	segToLyr map[uint32]uint32
-	grpToSeg map[uint32]uint32
+	lock     sync.Mutex
+	expToApp map[uint32]idMark
+	lyrToExp map[uint32]idMark
+	segToLyr map[uint32]idMark
+	grpToSeg map[uint32]idMark
+}
+
+func cacheDropOld() {
+	stamp := uint32(time.Now().Unix())
+	// avoid to hold lock too long time
+	cacheDropOldParly(relationCache.expToApp, stamp)
+	cacheDropOldParly(relationCache.lyrToExp, stamp)
+	cacheDropOldParly(relationCache.segToLyr, stamp)
+	cacheDropOldParly(relationCache.grpToSeg, stamp)
+}
+
+func cacheDropOldParly(cache map[uint32]idMark, stamp uint32) {
+	relationCache.lock.Lock()
+	for key, val := range cache {
+		if stamp-val.stamp > relationTTL {
+			delete(cache, key)
+		}
+	}
+	relationCache.lock.Unlock()
 }
 
 type privilegeChecker func(*Context, uint32) (bool, error)
@@ -73,16 +102,19 @@ func checkAppPrivilege(ctx *Context, uid, appId uint32, expected privilegeLevel)
 }
 
 func resolveCachedRelation(
-	ctx *Context, cache map[uint32]uint32, key uint32, stmt *sql.Stmt,
+	ctx *Context, cache map[uint32]idMark, key uint32, stmt *sql.Stmt,
 ) (uint32, bool, error) {
-	relationCache.lock.RLock()
+	relationCache.lock.Lock()
 	val, ok := cache[key]
-	relationCache.lock.RUnlock()
 	if ok {
-		return val, true, nil
+		cache[key] = newIdMark(val.id)
+	}
+	relationCache.lock.Unlock()
+	if ok {
+		return val.id, true, nil
 	}
 
-	if err := stmt.QueryRowContext(ctx, key).Scan(&val); err != nil {
+	if err := stmt.QueryRowContext(ctx, key).Scan(&val.id); err != nil {
 		if err == sql.ErrNoRows {
 			ctx.Debugf("auth relation miss key=%d", key)
 			return 0, false, nil
@@ -91,9 +123,9 @@ func resolveCachedRelation(
 	}
 
 	relationCache.lock.Lock()
-	cache[key] = val
+	cache[key] = newIdMark(val.id)
 	relationCache.lock.Unlock()
-	return val, true, nil
+	return val.id, true, nil
 }
 
 func resolveAppByExp(ctx *Context, expId uint32) (uint32, bool, error) {

@@ -115,6 +115,15 @@ func lyrGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}) {
 		return
 	}
+	if len(resp.Segment) > 0 {
+		mark := newIdMark(resp.Id)
+		relationCache.lock.Lock()
+		for i := 0; i < len(resp.Segment); i++ {
+			segId := resp.Segment[i].Id
+			relationCache.segToLyr[segId] = mark
+		}
+		relationCache.lock.Unlock()
+	}
 
 	utils.HttpReplyJsonWithLog(ctx.ContextLogger, w, http.StatusOK, resp)
 }

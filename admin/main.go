@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"os"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/julienschmidt/httprouter"
@@ -83,6 +84,14 @@ func Main() int {
 		fmt.Printf("fail to prepare SQL: %v\n", err)
 		return -1
 	}
+	quit := false
+	defer func() { quit = true }()
+	go func() {
+		for !quit {
+			time.Sleep(time.Hour)
+			cacheDropOld()
+		}
+	}()
 
 	utils.InitLog(logPath, config.Log.MaxBackups, config.Log.MaxDays)
 	if config.Test {

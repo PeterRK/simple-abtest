@@ -23,8 +23,8 @@ var userSql struct {
 }
 
 var privSql struct {
-	update *sql.Stmt
-	remove *sql.Stmt
+	update      *sql.Stmt
+	remove      *sql.Stmt
 
 	getListByApp *sql.Stmt
 	getListByUid *sql.Stmt
