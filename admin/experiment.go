@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
 	"math/rand/v2"
@@ -102,12 +101,12 @@ func bindExpOp(router *httprouter.Router, registry *prometheus.Registry) {
 }
 
 func expGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	logger := utils.NewContextLogger("expGetOne")
+	ctx := NewContext(r.Context(), "expGetOne")
 	id, ok := parseUintParam(w, p, "id")
 	if !ok {
 		return
 	}
-	if _, ok := requireExpPrivilege(logger, w, r, id, privilegeReadOnly); !ok {
+	if _, ok := requireExpPrivilege(ctx, w, r, id, privilegeReadOnly); !ok {
 		return
 	}
 
@@ -116,10 +115,10 @@ func expGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		Layer []lyrSummary `json:"layer,omitempty"`
 	}{}
 	resp.Id = id
-	if !withTx(r.Context(), logger, w, &sql.TxOptions{
+	if !withTx(ctx, w, &sql.TxOptions{
 		Isolation: sql.LevelRepeatableRead,
 		ReadOnly:  true,
-	}, func(ctx context.Context, tx *sql.Tx) int {
+	}, func(ctx *Context, tx *sql.Tx) int {
 		var filter []byte
 		err := tx.Stmt(expSql.getOne).QueryRowContext(ctx, id).Scan(
 			&resp.Name, &resp.Desc, &resp.Status, &filter, &resp.Version)
@@ -127,19 +126,19 @@ func expGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 			if err == sql.ErrNoRows {
 				return http.StatusNotFound
 			}
-			logger.Errorf("fail to run sql[exp.getOne]: %v", err)
+			ctx.Errorf("fail to run sql[exp.getOne]: %v", err)
 			return http.StatusInternalServerError
 		}
 
 		if len(filter) != 0 {
 			err = json.Unmarshal(filter, &resp.Filter)
 			if err != nil {
-				logger.Errorf("broken filter json in experiment %d", id)
+				ctx.Errorf("broken filter json in experiment %d", id)
 				return http.StatusInternalServerError
 			}
 		}
 
-		return queryRows(logger, "lyr.getList",
+		return queryRows(ctx, "lyr.getList",
 			func() (*sql.Rows, error) { return tx.Stmt(lyrSql.getList).QueryContext(ctx, resp.Id) },
 			func(rows *sql.Rows) error {
 				var lyr lyrSummary
@@ -152,43 +151,43 @@ func expGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}) {
 		return
 	}
-	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(ctx.ContextLogger, w, http.StatusOK, resp)
 }
 
 func expCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	logger := utils.NewContextLogger("expCreate")
+	ctx := NewContext(r.Context(), "expCreate")
 	req := &struct {
 		AppId  uint32 `json:"app_id"`
 		AppVer uint32 `json:"app_ver"`
 		expSummary
 	}{}
-	if !getJsonArgs(logger, w, r, req) {
+	if !getJsonArgs(ctx, w, r, req) {
 		return
 	}
 	if len(req.Name) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	if _, ok := requireAppPrivilege(logger, w, r, req.AppId, privilegeReadWrite); !ok {
+	if _, ok := requireAppPrivilege(ctx, w, r, req.AppId, privilegeReadWrite); !ok {
 		return
 	}
 
 	var id uint32
-	if !withTx(r.Context(), logger, w, &sql.TxOptions{
+	if !withTx(ctx, w, &sql.TxOptions{
 		Isolation: sql.LevelReadUncommitted,
-	}, func(ctx context.Context, tx *sql.Tx) int {
+	}, func(ctx *Context, tx *sql.Tx) int {
 		rawID, err := utils.SqlCreate(ctx, tx.Stmt(expSql.create),
 			req.AppId, req.Name, req.Desc, rand.Uint32())
 		if err != nil {
-			logger.Errorf("fail to run sql[exp.create]: %v", err)
+			ctx.Errorf("fail to run sql[exp.create]: %v", err)
 			return http.StatusInternalServerError
 		}
 		id = uint32(rawID)
 
-		if _, err = createLayer(ctx, logger, tx, id, req.Name); err != nil {
+		if _, err = createLayer(ctx, tx, id, req.Name); err != nil {
 			return http.StatusInternalServerError
 		}
-		return touch(ctx, logger, tx.Stmt(appSql.touch), req.AppId, req.AppVer, "app")
+		return touch(ctx, tx.Stmt(appSql.touch), req.AppId, req.AppVer, "app")
 	}) {
 		return
 	}
@@ -199,21 +198,21 @@ func expCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	resp.Id = id
 	resp.Status = 0
 	resp.Version = 0
-	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(ctx.ContextLogger, w, http.StatusOK, resp)
 }
 
 func expUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	logger := utils.NewContextLogger("expUpdate")
+	ctx := NewContext(r.Context(), "expUpdate")
 	id, ok := parseUintParam(w, p, "id")
 	if !ok {
 		return
 	}
-	if _, ok := requireExpPrivilege(logger, w, r, id, privilegeReadWrite); !ok {
+	if _, ok := requireExpPrivilege(ctx, w, r, id, privilegeReadWrite); !ok {
 		return
 	}
 
 	req := &expDetail{}
-	if !getJsonArgs(logger, w, r, req) {
+	if !getJsonArgs(ctx, w, r, req) {
 		return
 	}
 	if len(req.Name) == 0 {
@@ -227,27 +226,27 @@ func expUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		_, err = core.ParseExpr(filter)
 	}
 	if err != nil {
-		logger.Warnf("illegal filter json: %v", req.Filter)
+		ctx.Warnf("illegal filter json: %v", req.Filter)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	n, err := utils.SqlModify(r.Context(), expSql.update, req.Name, req.Desc, filter,
+	n, err := utils.SqlModify(ctx, expSql.update, req.Name, req.Desc, filter,
 		req.Version+1, req.Id, req.Version)
 	if err != nil {
-		logger.Errorf("fail to run sql[exp.update]: %v", err)
+		ctx.Errorf("fail to run sql[exp.update]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	if n == 0 {
-		logger.Warnf("operation conflict: %d", id)
+		ctx.Warnf("operation conflict: %d", id)
 		w.WriteHeader(http.StatusConflict)
 		return
 	}
 }
 
 func expDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	logger := utils.NewContextLogger("expDelete")
+	ctx := NewContext(r.Context(), "expDelete")
 	id, ok := parseUintParam(w, p, "id")
 	if !ok {
 		return
@@ -257,44 +256,44 @@ func expDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		AppVer  uint32 `json:"app_ver"`
 		Version uint32 `json:"version"`
 	}{}
-	if !getJsonArgs(logger, w, r, req) {
+	if !getJsonArgs(ctx, w, r, req) {
 		return
 	}
-	if _, ok := requireExpPrivilege(logger, w, r, id, privilegeReadWrite); !ok {
+	if _, ok := requireExpPrivilege(ctx, w, r, id, privilegeReadWrite); !ok {
 		return
 	}
 
-	if !withTx(r.Context(), logger, w, &sql.TxOptions{
+	if !withTx(ctx, w, &sql.TxOptions{
 		Isolation: sql.LevelReadUncommitted,
-	}, func(ctx context.Context, tx *sql.Tx) int {
+	}, func(ctx *Context, tx *sql.Tx) int {
 		n, err := utils.SqlModify(ctx, tx.Stmt(expSql.remove), id, req.AppId, req.Version)
 		if err != nil {
-			logger.Errorf("fail to run sql[exp.remove]: %v", err)
+			ctx.Errorf("fail to run sql[exp.remove]: %v", err)
 			return http.StatusInternalServerError
 		}
 		if n == 0 {
-			logger.Warnf("operation conflict: %d", id)
+			ctx.Warnf("operation conflict: %d", id)
 			return http.StatusConflict
 		}
-		return touch(ctx, logger, tx.Stmt(appSql.touch), req.AppId, req.AppVer, "app")
+		return touch(ctx, tx.Stmt(appSql.touch), req.AppId, req.AppVer, "app")
 	}) {
 		return
 	}
 }
 
 func expShuffle(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	logger := utils.NewContextLogger("expShuffle")
+	ctx := NewContext(r.Context(), "expShuffle")
 	id, ok := parseUintParam(w, p, "id")
 	if !ok {
 		return
 	}
-	if _, ok := requireExpPrivilege(logger, w, r, id, privilegeReadWrite); !ok {
+	if _, ok := requireExpPrivilege(ctx, w, r, id, privilegeReadWrite); !ok {
 		return
 	}
 
-	n, err := utils.SqlModify(r.Context(), expSql.shuffle, rand.Uint32(), id)
+	n, err := utils.SqlModify(ctx, expSql.shuffle, rand.Uint32(), id)
 	if err != nil {
-		logger.Errorf("fail to run sql[exp.shuffle]: %v", err)
+		ctx.Errorf("fail to run sql[exp.shuffle]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -302,11 +301,11 @@ func expShuffle(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	logger.Infof("shuffle experiment %d", id)
+	ctx.Infof("shuffle experiment %d", id)
 }
 
 func expSwitch(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	logger := utils.NewContextLogger("expSwitch")
+	ctx := NewContext(r.Context(), "expSwitch")
 	id, ok := parseUintParam(w, p, "id")
 	if !ok {
 		return
@@ -315,27 +314,27 @@ func expSwitch(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		Status  uint8  `json:"status"`
 		Version uint32 `json:"version"`
 	}{}
-	if !getJsonArgs(logger, w, r, req) {
+	if !getJsonArgs(ctx, w, r, req) {
 		return
 	}
 	if req.Status != 0 && req.Status != 1 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	if _, ok := requireExpPrivilege(logger, w, r, id, privilegeReadWrite); !ok {
+	if _, ok := requireExpPrivilege(ctx, w, r, id, privilegeReadWrite); !ok {
 		return
 	}
 
-	n, err := utils.SqlModify(r.Context(), expSql.toggle, req.Status, req.Version+1, id, req.Version)
+	n, err := utils.SqlModify(ctx, expSql.toggle, req.Status, req.Version+1, id, req.Version)
 	if err != nil {
-		logger.Errorf("fail to run sql[exp.toggle]: %v", err)
+		ctx.Errorf("fail to run sql[exp.toggle]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	if n == 0 {
-		logger.Warnf("operation conflict: %d", id)
+		ctx.Warnf("operation conflict: %d", id)
 		w.WriteHeader(http.StatusConflict)
 		return
 	}
-	logger.Infof("toggle experiment %d: %d", id, req.Status)
+	ctx.Infof("toggle experiment %d: %d", id, req.Status)
 }

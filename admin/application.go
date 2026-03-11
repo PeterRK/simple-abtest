@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"database/sql"
 	"net/http"
 
@@ -80,15 +79,15 @@ type appDetail struct {
 }
 
 func appGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	logger := utils.NewContextLogger("appGetList")
-	uid, ok := verifySession(logger, w, r)
+	ctx := NewContext(r.Context(), "appGetList")
+	uid, ok := verifySession(ctx, w, r)
 	if !ok {
 		return
 	}
 
 	resp := make([]appSummary, 0)
-	code := queryRows(logger, "app.getList",
-		func() (*sql.Rows, error) { return appSql.getList.QueryContext(r.Context(), uid) },
+	code := queryRows(ctx, "app.getList",
+		func() (*sql.Rows, error) { return appSql.getList.QueryContext(ctx, uid) },
 		func(rows *sql.Rows) error {
 			var rec appSummary
 			if err := rows.Scan(&rec.Id, &rec.Name, &rec.AccessToken); err != nil {
@@ -101,16 +100,16 @@ func appGetList(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(code)
 		return
 	}
-	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, &resp)
+	utils.HttpReplyJsonWithLog(ctx.ContextLogger, w, http.StatusOK, &resp)
 }
 
 func appGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	logger := utils.NewContextLogger("appGetOne")
+	ctx := NewContext(r.Context(), "appGetOne")
 	id, ok := parseUintParam(w, p, "id")
 	if !ok {
 		return
 	}
-	if _, ok := requireAppPrivilege(logger, w, r, id, privilegeReadOnly); !ok {
+	if _, ok := requireAppPrivilege(ctx, w, r, id, privilegeReadOnly); !ok {
 		return
 	}
 
@@ -119,21 +118,21 @@ func appGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		Experiment []expSummary `json:"experiment,omitempty"`
 	}{}
 	resp.Id = id
-	if !withTx(r.Context(), logger, w, &sql.TxOptions{
+	if !withTx(ctx, w, &sql.TxOptions{
 		Isolation: sql.LevelRepeatableRead,
 		ReadOnly:  true,
-	}, func(ctx context.Context, tx *sql.Tx) int {
+	}, func(ctx *Context, tx *sql.Tx) int {
 		err := tx.Stmt(appSql.getOne).QueryRowContext(ctx, id).Scan(
 			&resp.Name, &resp.Desc, &resp.AccessToken, &resp.Version)
 		if err != nil {
 			if err == sql.ErrNoRows {
 				return http.StatusNotFound
 			}
-			logger.Errorf("fail to run sql[app.getOne]: %v", err)
+			ctx.Errorf("fail to run sql[app.getOne]: %v", err)
 			return http.StatusInternalServerError
 		}
 
-		return queryRows(logger, "exp.getList",
+		return queryRows(ctx, "exp.getList",
 			func() (*sql.Rows, error) { return tx.Stmt(expSql.getList).QueryContext(ctx, resp.Id) },
 			func(rows *sql.Rows) error {
 				var exp expSummary
@@ -147,18 +146,18 @@ func appGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(ctx.ContextLogger, w, http.StatusOK, resp)
 }
 
 func appCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	logger := utils.NewContextLogger("appCreate")
-	uid, ok := verifySession(logger, w, r)
+	ctx := NewContext(r.Context(), "appCreate")
+	uid, ok := verifySession(ctx, w, r)
 	if !ok {
 		return
 	}
 
 	req := &appDetail{}
-	if !getJsonArgs(logger, w, r, req) {
+	if !getJsonArgs(ctx, w, r, req) {
 		return
 	}
 	if len(req.Name) == 0 {
@@ -168,21 +167,22 @@ func appCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	token, err := utils.GenRandomToken()
 	if err != nil {
+		ctx.Debug("app create failed: generate access token")
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	var appId uint32
-	if !withTx(r.Context(), logger, w, nil, func(ctx context.Context, tx *sql.Tx) int {
+	if !withTx(ctx, w, nil, func(ctx *Context, tx *sql.Tx) int {
 		id, err := utils.SqlCreate(ctx, tx.Stmt(appSql.create), req.Name, req.Desc, token)
 		if err != nil {
-			logger.Errorf("fail to run sql[app.create]: %v", err)
+			ctx.Errorf("fail to run sql[app.create]: %v", err)
 			return http.StatusInternalServerError
 		}
 		appId = uint32(id)
 		if _, err = utils.SqlModify(ctx, tx.Stmt(privSql.update),
 			uid, appId, privilegeAdmin, uid,
 			privilegeAdmin, uid); err != nil {
-			logger.Errorf("fail to run sql[priv.update]: %v", err)
+			ctx.Errorf("fail to run sql[priv.update]: %v", err)
 			return http.StatusInternalServerError
 		}
 		return http.StatusOK
@@ -194,21 +194,21 @@ func appCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	resp.Id = appId
 	resp.AccessToken = token
 	resp.Version = 0
-	utils.HttpReplyJsonWithLog(logger, w, http.StatusOK, resp)
+	utils.HttpReplyJsonWithLog(ctx.ContextLogger, w, http.StatusOK, resp)
 }
 
 func appUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	logger := utils.NewContextLogger("appUpdate")
+	ctx := NewContext(r.Context(), "appUpdate")
 	id, ok := parseUintParam(w, p, "id")
 	if !ok {
 		return
 	}
-	if _, ok := requireAppPrivilege(logger, w, r, id, privilegeAdmin); !ok {
+	if _, ok := requireAppPrivilege(ctx, w, r, id, privilegeAdmin); !ok {
 		return
 	}
 
 	req := &appDetail{}
-	if !getJsonArgs(logger, w, r, req) {
+	if !getJsonArgs(ctx, w, r, req) {
 		return
 	}
 	if len(req.Name) == 0 {
@@ -217,57 +217,57 @@ func appUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 	req.Id = id
 
-	n, err := utils.SqlModify(r.Context(), appSql.update, req.Name, req.Desc,
+	n, err := utils.SqlModify(ctx, appSql.update, req.Name, req.Desc,
 		req.Version+1, req.Id, req.Version)
 	if err != nil {
-		logger.Errorf("fail to run sql[app.update]: %v", err)
+		ctx.Errorf("fail to run sql[app.update]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	if n == 0 {
-		logger.Warnf("operation conflict: %d", id)
+		ctx.Warnf("operation conflict: %d", id)
 		w.WriteHeader(http.StatusConflict)
 		return
 	}
 }
 
 func appDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	logger := utils.NewContextLogger("appDelete")
+	ctx := NewContext(r.Context(), "appDelete")
 	id, ok := parseUintParam(w, p, "id")
 	if !ok {
 		return
 	}
-	if _, ok := requireAppPrivilege(logger, w, r, id, privilegeAdmin); !ok {
+	if _, ok := requireAppPrivilege(ctx, w, r, id, privilegeAdmin); !ok {
 		return
 	}
 	req := &struct {
 		Version uint32 `json:"version"`
 	}{}
-	if !getJsonArgs(logger, w, r, req) {
+	if !getJsonArgs(ctx, w, r, req) {
 		return
 	}
 
 	cnt := 0
-	err := expSql.count.QueryRowContext(r.Context(), id).Scan(&cnt)
+	err := expSql.count.QueryRowContext(ctx, id).Scan(&cnt)
 	if err != nil {
-		logger.Errorf("fail to run sql[exp.count]: %v", err)
+		ctx.Errorf("fail to run sql[exp.count]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	if cnt > 0 {
-		logger.Warnf("try to delete application with experiments: %d", id)
+		ctx.Warnf("try to delete application with experiments: %d", id)
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 
-	n, err := utils.SqlModify(r.Context(), appSql.remove, id, req.Version)
+	n, err := utils.SqlModify(ctx, appSql.remove, id, req.Version)
 	if err != nil {
-		logger.Errorf("fail to run sql[app.remove]: %v", err)
+		ctx.Errorf("fail to run sql[app.remove]: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	if n == 0 {
-		logger.Warnf("operation conflict: %d", id)
+		ctx.Warnf("operation conflict: %d", id)
 		w.WriteHeader(http.StatusConflict)
 		return
 	}
