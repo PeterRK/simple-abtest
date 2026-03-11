@@ -37,7 +37,7 @@ func prepareExpSql(db *sql.DB) (err error) {
 		return err
 	}
 	expSql.getOne, err = db.Prepare(
-		"SELECT `name`,`description`,`status`,`filter`,`version` " +
+		"SELECT `app_id`,`name`,`description`,`status`,`filter`,`version` " +
 			"FROM `experiment` WHERE `exp_id`=?")
 	if err != nil {
 		return err
@@ -87,6 +87,7 @@ type expSummary struct {
 
 type expDetail struct {
 	expSummary
+	AppId  uint32          `json:"app_id,omitempty"`
 	Filter []core.ExprNode `json:"filter,omitempty"`
 }
 
@@ -121,7 +122,7 @@ func expGetOne(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}, func(ctx *Context, tx *sql.Tx) int {
 		var filter []byte
 		err := tx.Stmt(expSql.getOne).QueryRowContext(ctx, id).Scan(
-			&resp.Name, &resp.Desc, &resp.Status, &filter, &resp.Version)
+			&resp.AppId, &resp.Name, &resp.Desc, &resp.Status, &filter, &resp.Version)
 		if err != nil {
 			if err == sql.ErrNoRows {
 				return http.StatusNotFound

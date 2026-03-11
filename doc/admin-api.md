@@ -350,6 +350,7 @@ Response `200 OK`:
 ```json
 {
   "id": 2001,
+  "app_id": 1001,
   "status": 1,
   "name": "exp-A",
   "description": "optional",

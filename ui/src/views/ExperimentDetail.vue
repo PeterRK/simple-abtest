@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getExp, updateExp, shuffleExp, deleteExp, getApps, getApp, getAppPrivileges, grantAppPrivilege } from '@/api'
+import { getExp, updateExp, shuffleExp, deleteExp, getApp, getAppPrivileges, grantAppPrivilege } from '@/api'
 import type { Experiment } from '@/api/types'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import LayerList from '@/components/traffic/LayerList.vue'
@@ -14,7 +14,7 @@ const router = useRouter()
 const expId = Number(route.params.id)
 const experiment = ref<Experiment | null>(null)
 const loading = ref(false)
-const appInfo = ref<{ id: number; version: number } | null>(null)
+const appVersion = ref<number | null>(null)
 const layerListRef = ref<InstanceType<typeof LayerList> | null>(null)
 const expSnapshot = ref<{ name: string; description?: string; filter: string } | null>(null)
 const { t } = useI18n()
@@ -53,11 +53,17 @@ const isExperimentDirty = computed(
   () => isExperimentNameDirty.value || isExperimentDescriptionDirty.value || isExperimentFilterDirty.value
 )
 
+const appId = computed(() => {
+  const id = experiment.value?.app_id
+  return typeof id === 'number' && id > 0 ? id : null
+})
+
 const loadExp = async () => {
   loading.value = true
   try {
     const res = await getExp(expId)
     experiment.value = res.data
+    appVersion.value = typeof res.data.app_ver === 'number' ? res.data.app_ver : null
     syncSnapshot(res.data)
   } catch (e) {
     ElMessage.error(t('message.failedLoadExperiments'))
@@ -103,45 +109,44 @@ const handleCreateLayer = () => {
   layerListRef.value?.openLayerDialog()
 }
 
-const resolveAppInfo = async () => {
-  if (experiment.value?.app_id && experiment.value?.app_ver) {
-    appInfo.value = { id: experiment.value.app_id, version: experiment.value.app_ver }
-    return
-  }
+const resolveAppVersion = async () => {
+  if (!appId.value) return null
+  if (typeof appVersion.value === 'number') return appVersion.value
   try {
-    const appsRes = await getApps()
-    for (const app of appsRes.data || []) {
-      const appRes = await getApp(app.id)
-      const hasExp = (appRes.data.experiment || []).some(exp => exp.id === expId)
-      if (hasExp && appRes.data.version != null) {
-        appInfo.value = { id: appRes.data.id, version: appRes.data.version }
-        return
-      }
+    const appRes = await getApp(appId.value)
+    if (typeof appRes.data.version === 'number') {
+      appVersion.value = appRes.data.version
+      return appRes.data.version
     }
   } catch (e) {
-    appInfo.value = null
+    return null
   }
+  return null
 }
 
 const handleDelete = async () => {
   if (!experiment.value) return
-  await resolveAppInfo()
-  if (!appInfo.value) {
+  if (!appId.value) {
+    ElMessage.error(t('message.appInfoMissing'))
+    return
+  }
+  const resolvedAppVersion = await resolveAppVersion()
+  if (resolvedAppVersion == null) {
     ElMessage.error(t('message.appInfoMissing'))
     return
   }
   try {
     await ElMessageBox.confirm(t('confirm.deleteExperiment'), t('common.warning'), { type: 'warning' })
     await deleteExp(experiment.value.id, {
-      app_id: appInfo.value.id,
-      app_ver: appInfo.value.version,
+      app_id: appId.value,
+      app_ver: resolvedAppVersion,
       version: experiment.value.version
     })
     ElMessage.success(t('message.experimentDeleted'))
     router.push({
       path: '/',
       query: {
-        app_id: String(appInfo.value.id),
+        app_id: String(appId.value),
         refresh: String(Date.now())
       }
     })
@@ -158,14 +163,13 @@ const privilegeLabel = (privilege: number) => {
 }
 
 const loadPrivileges = async () => {
-  await resolveAppInfo()
-  if (!appInfo.value) {
+  if (!appId.value) {
     ElMessage.error(t('message.appInfoMissing'))
     return
   }
   privilegeLoading.value = true
   try {
-    const res = await getAppPrivileges(appInfo.value.id)
+    const res = await getAppPrivileges(appId.value)
     privileges.value = res.data || []
   } catch (e) {
     ElMessage.error(t('message.failedLoadPrivileges'))
@@ -180,8 +184,7 @@ const showPrivilegeDialog = async () => {
 }
 
 const submitPrivilege = async () => {
-  await resolveAppInfo()
-  if (!appInfo.value) {
+  if (!appId.value) {
     ElMessage.error(t('message.appInfoMissing'))
     return
   }
@@ -190,7 +193,7 @@ const submitPrivilege = async () => {
     return
   }
   try {
-    await grantAppPrivilege(appInfo.value.id, {
+    await grantAppPrivilege(appId.value, {
       name: privilegeForm.value.name.trim(),
       privilege: privilegeForm.value.privilege
     })
@@ -203,13 +206,12 @@ const submitPrivilege = async () => {
 }
 
 const revokePrivilege = async (name: string) => {
-  await resolveAppInfo()
-  if (!appInfo.value) {
+  if (!appId.value) {
     ElMessage.error(t('message.appInfoMissing'))
     return
   }
   try {
-    await grantAppPrivilege(appInfo.value.id, { name, privilege: 0 })
+    await grantAppPrivilege(appId.value, { name, privilege: 0 })
     ElMessage.success(t('message.privilegeUpdated'))
     await loadPrivileges()
   } catch (e) {
