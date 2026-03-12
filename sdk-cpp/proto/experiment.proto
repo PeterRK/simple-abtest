@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package simple_abtest.proto;
+
+message ExprNode {
+  uint32 op = 1;
+  uint32 dtype = 2;
+  string key = 3;
+  string s = 4;
+  int64 i = 5;
+  double f = 6;
+  repeated string ss = 7;
+  repeated uint32 child = 8;
+}
+
+message Group {
+  string name = 1;
+  bytes bm = 2;
+  string cfg = 3;
+}
+
+message SegmentRange {
+  uint32 a = 1;
+  uint32 b = 2;
+}
+
+message Segment {
+  SegmentRange r = 1;
+  uint32 seed = 2;
+  repeated Group grp = 3;
+}
+
+message HitIndex {
+  uint32 s = 1;
+  uint32 g = 2;
+}
+
+message Layer {
+  string name = 1;
+  repeated Segment seg = 2;
+  map<string, HitIndex> force_hit = 3;
+}
+
+message Experiment {
+  repeated ExprNode filter = 1;
+  uint32 seed = 2;
+  repeated Layer lyr = 3;
+}
+
+message ExperimentList {
+  repeated Experiment items = 1;
+}
