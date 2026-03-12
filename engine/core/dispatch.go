@@ -49,7 +49,7 @@ type Experiment struct {
 
 // locate returns the first group whose bitmap contains the hashed slot of key.
 func (s *Segment) locate(key string) *Group {
-	slot := Hash64(uint64(s.Seed), utils.UnsafeStringToBytes(key)) % 1000
+	slot := Hash(uint64(s.Seed), utils.UnsafeStringToBytes(key)) % 1000
 	blk, sft := slot>>3, slot&7
 	m := byte(1) << sft
 	for i := 0; i < len(s.Groups); i++ {
@@ -88,7 +88,7 @@ func GetExpConfig(exps []Experiment, key string, ctx map[string]string) (config 
 		}
 
 		// rich experiment
-		slot := uint32(Hash64(uint64(exp.Seed), utils.UnsafeStringToBytes(key)) % 100)
+		slot := uint32(Hash(uint64(exp.Seed), utils.UnsafeStringToBytes(key)) % 100)
 		for j := 0; j < len(exp.Layers); j++ {
 			layer := &exp.Layers[j]
 			if idx, got := layer.ForceHit[key]; got {

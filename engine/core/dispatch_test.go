@@ -16,7 +16,7 @@ func fullBitmap() []byte {
 func findKey(seed uint32, begin, end uint64) (string, uint64) {
 	for i := 0; i < 10000; i++ {
 		key := fmt.Sprintf("k%d", i)
-		slot := Hash64(uint64(seed), []byte(key)) % 100
+		slot := Hash(uint64(seed), []byte(key)) % 100
 		if slot >= begin && slot < end {
 			return key, slot
 		}

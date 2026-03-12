@@ -99,9 +99,7 @@ func (s *state) end() {
 	s.b += s.a
 }
 
-// Hash128 computes a 128-bit non-cryptographic hash of data using seed.
-// It returns two 64-bit words suitable for sharding or slotting.
-func Hash128(seed uint64, data []byte) [2]uint64 {
+func Hash(seed uint64, data []byte) uint64 {
 	const magic uint64 = 0xdeadbeefdeadbeef
 	s := state{seed, seed, magic, magic}
 	l := uint64(len(data))
@@ -171,11 +169,5 @@ func Hash128(seed uint64, data []byte) [2]uint64 {
 
 	}
 	s.end()
-	return [2]uint64{s.a, s.b}
-}
-
-// Hash64 computes a 64-bit non-cryptographic hash of data using seed.
-// It is a convenience wrapper that returns the first word of Hash128.
-func Hash64(seed uint64, data []byte) uint64 {
-	return Hash128(seed, data)[0]
+	return s.a
 }
