@@ -145,7 +145,7 @@ func lyrCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		ExpVer uint32 `json:"exp_ver"`
 		lyrSummary
 	}{}
-	if !getJsonArgs(ctx, w, r, req) {
+	if !getJsonArgsWithLog(ctx, w, r, req) {
 		return
 	}
 	if len(req.Name) == 0 {
@@ -185,7 +185,7 @@ func lyrUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	req := &lyrDetail{}
-	if !getJsonArgs(ctx, w, r, req) {
+	if !getJsonArgsWithLog(ctx, w, r, req) {
 		return
 	}
 	if len(req.Name) == 0 {
@@ -222,7 +222,7 @@ func lyrDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		ExpVer  uint32 `json:"exp_ver"`
 		Version uint32 `json:"version"`
 	}{}
-	if !getJsonArgs(ctx, w, r, req) {
+	if !getJsonArgsWithLog(ctx, w, r, req) {
 		return
 	}
 	if _, ok := requireLyrPrivilege(ctx, w, r, id, privilegeReadWrite); !ok {
@@ -257,7 +257,7 @@ func lyrRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		Version uint32       `json:"version"`
 		Segment []segSummary `json:"segment,omitempty"`
 	}{}
-	if !getJsonArgs(ctx, w, r, req) {
+	if !getJsonArgsWithLog(ctx, w, r, req) {
 		return
 	}
 	if len(req.Segment) < 2 ||

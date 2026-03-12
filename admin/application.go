@@ -167,7 +167,7 @@ func appCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	req := &appDetail{}
-	if !getJsonArgs(ctx, w, r, req) {
+	if !getJsonArgsWithLog(ctx, w, r, req) {
 		return
 	}
 	if len(req.Name) == 0 {
@@ -218,7 +218,7 @@ func appUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	req := &appDetail{}
-	if !getJsonArgs(ctx, w, r, req) {
+	if !getJsonArgsWithLog(ctx, w, r, req) {
 		return
 	}
 	if len(req.Name) == 0 {
@@ -253,7 +253,7 @@ func appDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	req := &struct {
 		Version uint32 `json:"version"`
 	}{}
-	if !getJsonArgs(ctx, w, r, req) {
+	if !getJsonArgsWithLog(ctx, w, r, req) {
 		return
 	}
 

@@ -199,7 +199,7 @@ func grpCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		SegVer uint32 `json:"seg_ver"`
 		grpSummary
 	}{}
-	if !getJsonArgs(ctx, w, r, req) {
+	if !getJsonArgsWithLog(ctx, w, r, req) {
 		return
 	}
 	if len(req.Name) == 0 {
@@ -245,7 +245,7 @@ func grpUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	req := &grpDetail{}
-	if !getJsonArgs(ctx, w, r, req) {
+	if !getJsonArgsWithLog(ctx, w, r, req) {
 		return
 	}
 	if len(req.Name) == 0 {
@@ -283,7 +283,7 @@ func grpDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		SegVer  uint32 `json:"seg_ver"`
 		Version uint32 `json:"version"`
 	}{}
-	if !getJsonArgs(ctx, w, r, req) {
+	if !getJsonArgsWithLog(ctx, w, r, req) {
 		return
 	}
 	if _, ok := requireGrpPrivilege(ctx, w, r, id, privilegeReadWrite); !ok {

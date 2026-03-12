@@ -180,6 +180,7 @@ func userCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	if !getJsonArgs(ctx, w, r, req) {
 		return
 	}
+	ctx.Debugf("request name=%q", req.Name)
 	if len(req.Name) == 0 || len(req.Password) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -227,6 +228,7 @@ func userLogin(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	if !getJsonArgs(ctx, w, r, req) {
 		return
 	}
+	ctx.Debugf("request name=%q", req.Name)
 	if len(req.Name) == 0 || len(req.Password) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -275,6 +277,11 @@ func userUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
+	// Design note:
+	// This endpoint intentionally authorizes by verifying the target account's
+	// current password, instead of requiring an active session or self-check.
+	// That keeps password rotation possible even when the caller has lost or
+	// expired the current session, as long as they still know the old password.
 	req := &struct {
 		Password    string `json:"password"`
 		NewPassword string `json:"new_password"`
@@ -282,6 +289,7 @@ func userUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	if !getJsonArgs(ctx, w, r, req) {
 		return
 	}
+	ctx.Debugf("request target=%d has_new_password=%t", target, len(req.NewPassword) != 0)
 	if len(req.Password) == 0 || len(req.NewPassword) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -313,12 +321,17 @@ func userDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
+	// Design note:
+	// Account deletion follows the same credential-based authorization model as
+	// password update: possession of the target account's current password is
+	// treated as sufficient proof, without requiring an existing session.
 	req := &struct {
 		Password string `json:"password"`
 	}{}
 	if !getJsonArgs(ctx, w, r, req) {
 		return
 	}
+	ctx.Debugf("request target=%d delete=true", target)
 	if len(req.Password) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return

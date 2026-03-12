@@ -151,7 +151,7 @@ func segCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		LyrId  uint32 `json:"lyr_id"`
 		LyrVer uint32 `json:"lyr_ver"`
 	}{}
-	if !getJsonArgs(ctx, w, r, req) {
+	if !getJsonArgsWithLog(ctx, w, r, req) {
 		return
 	}
 	if _, ok := requireLyrPrivilege(ctx, w, r, req.LyrId, privilegeReadWrite); !ok {
@@ -198,7 +198,7 @@ func segDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		LyrVer  uint32 `json:"lyr_ver"`
 		Version uint32 `json:"version"`
 	}{}
-	if !getJsonArgs(ctx, w, r, req) {
+	if !getJsonArgsWithLog(ctx, w, r, req) {
 		return
 	}
 	if _, ok := requireSegPrivilege(ctx, w, r, id, privilegeReadWrite); !ok {
@@ -257,7 +257,7 @@ func segRebalance(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		GrpId   uint32 `json:"grp_id"`
 		Share   uint32 `json:"share"`
 	}{}
-	if !getJsonArgs(ctx, w, r, req) {
+	if !getJsonArgsWithLog(ctx, w, r, req) {
 		return
 	}
 	if _, ok := requireSegPrivilege(ctx, w, r, id, privilegeReadWrite); !ok {

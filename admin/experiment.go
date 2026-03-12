@@ -171,7 +171,7 @@ func expCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		AppVer uint32 `json:"app_ver"`
 		expSummary
 	}{}
-	if !getJsonArgs(ctx, w, r, req) {
+	if !getJsonArgsWithLog(ctx, w, r, req) {
 		return
 	}
 	if len(req.Name) == 0 {
@@ -222,7 +222,7 @@ func expUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	req := &expDetail{}
-	if !getJsonArgs(ctx, w, r, req) {
+	if !getJsonArgsWithLog(ctx, w, r, req) {
 		return
 	}
 	if len(req.Name) == 0 {
@@ -266,7 +266,7 @@ func expDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		AppVer  uint32 `json:"app_ver"`
 		Version uint32 `json:"version"`
 	}{}
-	if !getJsonArgs(ctx, w, r, req) {
+	if !getJsonArgsWithLog(ctx, w, r, req) {
 		return
 	}
 	if _, ok := requireExpPrivilege(ctx, w, r, id, privilegeReadWrite); !ok {
@@ -324,7 +324,7 @@ func expSwitch(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		Status  uint8  `json:"status"`
 		Version uint32 `json:"version"`
 	}{}
-	if !getJsonArgs(ctx, w, r, req) {
+	if !getJsonArgsWithLog(ctx, w, r, req) {
 		return
 	}
 	if req.Status != 0 && req.Status != 1 {

@@ -32,6 +32,14 @@ func parseUintParam(w http.ResponseWriter, p httprouter.Params, key string) (uin
 }
 
 func getJsonArgs(ctx *Context, w http.ResponseWriter, r *http.Request, req any) bool {
+	if err := utils.HttpGetJsonArgs(r, req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return false
+	}
+	return true
+}
+
+func getJsonArgsWithLog(ctx *Context, w http.ResponseWriter, r *http.Request, req any) bool {
 	if err := utils.HttpGetJsonArgsWithLog(ctx.ContextLogger, r, req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return false
