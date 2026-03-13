@@ -65,8 +65,8 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { createLyr, updateLyr, deleteLyr, getLayer, createSeg, rebalanceLyr } from '@/api'
-import type { Experiment, Layer } from '@/api/types'
+import { createLayer, updateLayer, deleteLayer, getLayer, createSegment, rebalanceLayer } from '@/api'
+import type { Experiment, Layer } from '@/types'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import SegmentList from './SegmentList.vue'
 import { useI18n } from '@/i18n'
@@ -167,7 +167,7 @@ const fetchLayerDetail = async (layerId: number, force = false) => {
 const handleCreate = async () => {
   if (!props.experiment) return
   try {
-    const res = await createLyr({
+    const res = await createLayer({
       exp_id: props.experiment.id,
       exp_ver: props.experiment.version!,
       name: form.value.name
@@ -191,7 +191,7 @@ const handleUpdateLayer = async (layer: Layer) => {
   const originalName = layerNameMap.value.get(layer.id)
   if (originalName === layer.name) return
   try {
-    await updateLyr(layer.id, {
+    await updateLayer(layer.id, {
       name: layer.name,
       version: layer.version
     })
@@ -207,7 +207,7 @@ const handleDeleteLayer = async (layer: Layer) => {
     if (!props.experiment) return
     try {
         await ElMessageBox.confirm(t('confirm.deleteLayer'), t('common.warning'), { type: 'warning' })
-        await deleteLyr(layer.id, {
+        await deleteLayer(layer.id, {
             exp_id: props.experiment.id,
             exp_ver: props.experiment.version!,
             version: layer.version!
@@ -226,7 +226,7 @@ const handleDeleteLayer = async (layer: Layer) => {
 
 const handleAddSegment = async (layer: Layer) => {
   try {
-    const res = await createSeg({
+    const res = await createSegment({
       lyr_id: layer.id,
       lyr_ver: layer.version!
     })
@@ -255,10 +255,10 @@ interface RebalanceItem {
 
 const rebalanceVisible = ref(false)
 const rebalanceSegments = ref<RebalanceItem[]>([])
-const rebalanceLayer = ref<Layer | null>(null)
+const rebalanceTargetLayer = ref<Layer | null>(null)
 
 const openRebalanceDialog = (layer: Layer) => {
-  rebalanceLayer.value = layer
+  rebalanceTargetLayer.value = layer
   rebalanceSegments.value = (layer.segment || []).map(s => ({
     id: s.id,
     begin: s.begin,
@@ -285,19 +285,19 @@ const updateRanges = (index: number) => {
 }
 
 const handleRebalance = async () => {
-  if (!rebalanceLayer.value) return
+  if (!rebalanceTargetLayer.value) return
   try {
     const total = rebalanceSegments.value.reduce((sum, item) => sum + (item?.percent || 0), 0)
     if (total !== 100) {
       ElMessage.error(t('message.sumShareMust100'))
       return
     }
-    await rebalanceLyr(rebalanceLayer.value.id, {
-      version: rebalanceLayer.value.version!,
+    await rebalanceLayer(rebalanceTargetLayer.value.id, {
+      version: rebalanceTargetLayer.value.version!,
       segment: rebalanceSegments.value
     })
     ElMessage.success(t('message.segmentsRebalanced'))
-    const currentSegments = rebalanceLayer.value.segment || []
+    const currentSegments = rebalanceTargetLayer.value.segment || []
     const versionMap = new Map(currentSegments.map(seg => [seg.id, seg.version]))
     const nextSegments = rebalanceSegments.value.map(item => ({
       id: item.id,
@@ -305,11 +305,11 @@ const handleRebalance = async () => {
       end: item.end,
       version: versionMap.get(item.id) || 0
     }))
-    rebalanceLayer.value.segment = nextSegments
-    rebalanceLayer.value.version = rebalanceLayer.value.version! + 1
+    rebalanceTargetLayer.value.segment = nextSegments
+    rebalanceTargetLayer.value.version = rebalanceTargetLayer.value.version! + 1
     layers.value = layers.value.map(layer =>
-      layer.id === rebalanceLayer.value?.id
-        ? { ...layer, segment: nextSegments, version: rebalanceLayer.value.version! }
+      layer.id === rebalanceTargetLayer.value?.id
+        ? { ...layer, segment: nextSegments, version: rebalanceTargetLayer.value.version! }
         : layer
     )
     rebalanceVisible.value = false

@@ -98,8 +98,8 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { createGrp, updateGrp, deleteGrp, rebalanceSeg, getGrpCfg, createGrpCfg, shuffleSeg, getGroup, getConfig } from '@/api'
-import type { Segment, Group, Config } from '@/api/types'
+import { createGroup, updateGroup, deleteGroup, rebalanceSegment, getConfigs, createConfig, shuffleSegment, getGroup, getConfig } from '@/api'
+import type { Segment, Group, Config } from '@/types'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from '@/i18n'
 
@@ -234,7 +234,7 @@ const bumpSegmentVersion = () => {
 const handleCreate = async () => {
   try {
     const segmentVersion = props.segment.version ?? 0
-    const res = await createGrp({
+    const res = await createGroup({
       seg_id: props.segment.id,
       seg_ver: segmentVersion,
       name: form.value.name
@@ -270,19 +270,19 @@ const handleUpdate = async () => {
     let createdConfigId: number | null = null
     let createdConfigStamp = ''
     if (hasContentChange) {
-      const res = await createGrpCfg(selectedGroupDetail.value.id, nextContent)
+      const res = await createConfig(selectedGroupDetail.value.id, nextContent)
       createdConfigId = res.data.id
       createdConfigStamp = res.data.stamp || ''
       nextConfigId = res.data.id
       nextConfigContent = nextContent
-      await updateGrp(selectedGroupDetail.value.id, {
+      await updateGroup(selectedGroupDetail.value.id, {
         name: groupForm.value.name,
         version: selectedGroupDetail.value.version,
         cfg_id: res.data.id,
         force_hit: forceHit
       })
     } else {
-      await updateGrp(selectedGroupDetail.value.id, {
+      await updateGroup(selectedGroupDetail.value.id, {
         name: groupForm.value.name,
         version: selectedGroupDetail.value.version,
         cfg_id: activeConfigId,
@@ -327,7 +327,7 @@ const handleDelete = async (grp: Group) => {
         const segmentVersion = props.segment.version ?? 0
         const groupVersion = grp.version ?? 0
         await ElMessageBox.confirm(t('confirm.deleteGroup'), t('common.warning'), { type: 'warning' })
-        await deleteGrp(grp.id, {
+        await deleteGroup(grp.id, {
             seg_id: props.segment.id,
             seg_ver: segmentVersion,
             version: groupVersion
@@ -348,7 +348,7 @@ const handleDelete = async (grp: Group) => {
 
 const handleShuffle = async () => {
   try {
-    await shuffleSeg(props.segment.id)
+    await shuffleSegment(props.segment.id)
     ElMessage.success(t('message.segmentSeedShuffled'))
   } catch (e) {
     // ignore
@@ -414,7 +414,7 @@ const handleRebalance = async () => {
     }
     try {
         const segmentVersion = props.segment.version ?? 0
-        await rebalanceSeg(props.segment.id, {
+        await rebalanceSegment(props.segment.id, {
             version: segmentVersion,
             grp_id: rebalanceGroup.value.id,
             share: nextShare
@@ -446,7 +446,7 @@ const toBeginTimestamp = () => {
 
 const loadConfigs = async (grpId: number, begin?: number) => {
   try {
-    const res = await getGrpCfg(grpId, begin)
+    const res = await getConfigs(grpId, begin)
     configHistory.value = res.data || []
   } catch (e) {
     // ignore

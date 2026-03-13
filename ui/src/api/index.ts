@@ -1,5 +1,6 @@
 import axios from 'axios'
 import type { Application, Experiment, Layer, Segment, Group, Config } from '@/types'
+import type { ExprNode } from '@/types'
 import { clearSession, useAuth } from '@/auth'
 
 const adminApi = axios.create({
@@ -56,7 +57,8 @@ export const grantAppPrivilege = (id: number, data: { name: string; privilege: n
 // Experiment
 export const createExp = (data: { app_id: number; app_ver: number; name: string; description?: string }) => adminApi.post<Experiment>('/exp', data)
 export const getExp = (id: number) => adminApi.get<Experiment>(`/exp/${id}`)
-export const updateExp = (id: number, data: { name: string; description?: string; version: number; filter?: any[] }) => adminApi.put<Experiment>(`/exp/${id}`, data)
+export const updateExp = (id: number, data: { name: string; description?: string; version: number; filter?: ExprNode[] }) =>
+  adminApi.put<Experiment>(`/exp/${id}`, data)
 export const deleteExp = (id: number, data: { app_id: number; app_ver: number; version: number }) => adminApi.delete(`/exp/${id}`, { data })
 export const shuffleExp = (id: number) => adminApi.post(`/exp/${id}/shuffle`)
 export const switchExp = (id: number, data: { status: number; version: number }) => adminApi.put(`/exp/${id}/status`, data)
@@ -94,21 +96,3 @@ export const verify = (data: { appid: number; key: string; context?: Record<stri
       ACCESS_TOKEN: accessToken
     }
   })
-
-// Aliases for compatibility with existing components
-export const createLyr = createLayer
-export const updateLyr = updateLayer
-export const deleteLyr = deleteLayer
-export const rebalanceLyr = rebalanceLayer
-
-export const createSeg = createSegment
-export const deleteSeg = deleteSegment
-export const shuffleSeg = shuffleSegment
-export const rebalanceSeg = rebalanceSegment
-
-export const createGrp = createGroup
-export const updateGrp = updateGroup
-export const deleteGrp = deleteGroup
-
-export const getGrpCfg = getConfigs
-export const createGrpCfg = createConfig

@@ -6,10 +6,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from '@/i18n'
 import { useAuth } from '@/auth'
+import { useRecentApp } from '@/composables/useRecentApp'
 
 const router = useRouter()
 const route = useRoute()
-const RECENT_APP_ID_KEY = 'simple-abtest:recent-app-id'
 const apps = ref<Application[]>([])
 const selectedAppId = ref<number | null>(null)
 const experiments = ref<Experiment[]>([])
@@ -27,6 +27,7 @@ const expForm = ref({ name: '', description: '' })
 const experimentStatusMap = ref(new Map<number, number>())
 const { t } = useI18n()
 const { isLoggedIn } = useAuth()
+const { getRecentAppId, setRecentAppId } = useRecentApp()
 const normalizeText = (text?: string) => text || ''
 
 const isAppNameDirty = computed(() => {
@@ -41,20 +42,6 @@ const isAppDescriptionDirty = computed(() => {
 
 const isAppDirty = computed(() => isAppNameDirty.value || isAppDescriptionDirty.value)
 
-const getRememberedAppId = () => {
-  if (typeof window === 'undefined') return null
-  const raw = window.localStorage.getItem(RECENT_APP_ID_KEY)
-  if (!raw) return null
-  const parsed = Number(raw)
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : null
-}
-
-const rememberAppId = (appId: number | null) => {
-  if (typeof window === 'undefined') return
-  if (appId == null || appId <= 0) return
-  window.localStorage.setItem(RECENT_APP_ID_KEY, String(appId))
-}
-
 const loadApps = async () => {
   try {
     const res = await getApps()
@@ -68,7 +55,7 @@ const loadApps = async () => {
       }
     }
     if (!selectedAppId.value) {
-      const rememberedAppId = getRememberedAppId()
+      const rememberedAppId = getRecentAppId()
       if (rememberedAppId && apps.value.some(app => app.id === rememberedAppId)) {
         selectedAppId.value = rememberedAppId
       }
@@ -135,7 +122,7 @@ const loadExperiments = async () => {
 }
 
 const handleAppChange = () => {
-  rememberAppId(selectedAppId.value)
+  setRecentAppId(selectedAppId.value)
   loadExperiments()
 }
 
@@ -270,7 +257,7 @@ onMounted(() => {
     const appId = Number(route.query.app_id)
     if (Number.isFinite(appId) && appId > 0) {
       selectedAppId.value = appId
-      rememberAppId(appId)
+      setRecentAppId(appId)
       loadExperiments()
       return
     }
@@ -283,7 +270,7 @@ onMounted(() => {
 watch(
   () => selectedAppId.value,
   (val) => {
-    rememberAppId(val)
+    setRecentAppId(val)
   }
 )
 

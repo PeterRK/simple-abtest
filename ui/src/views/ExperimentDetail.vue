@@ -2,11 +2,11 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getExp, updateExp, shuffleExp, deleteExp, getApp, getAppPrivileges, grantAppPrivilege } from '@/api'
-import type { Experiment } from '@/api/types'
+import type { Experiment } from '@/types'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import LayerList from '@/components/traffic/LayerList.vue'
 import FilterEditor from '@/components/FilterEditor.vue'
-import { validateExprNodes } from '@/utils/filter'
+import { serializeExprNodes, validateExprNodes } from '@/utils/filter'
 import { useI18n } from '@/i18n'
 
 const route = useRoute()
@@ -23,7 +23,7 @@ const privilegeLoading = ref(false)
 const privileges = ref<{ name: string; privilege: number; grantor: string }[]>([])
 const privilegeForm = ref({ name: '', privilege: 1 })
 
-const getFilterText = (filter?: Experiment['filter']) => JSON.stringify(filter || [])
+const getFilterText = (filter?: Experiment['filter']) => serializeExprNodes(filter)
 const normalizeText = (text?: string) => text || ''
 
 const syncSnapshot = (exp: Experiment) => {

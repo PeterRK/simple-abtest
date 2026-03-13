@@ -4,8 +4,8 @@ import { getApps, verify } from '@/api'
 import type { Application } from '@/types'
 import { ElMessage } from 'element-plus'
 import { useI18n } from '@/i18n'
+import { useRecentApp } from '@/composables/useRecentApp'
 
-const RECENT_APP_ID_KEY = 'simple-abtest:recent-app-id'
 const apps = ref<Application[]>([])
 const tokenDialogVisible = ref(false)
 const form = ref({
@@ -15,22 +15,9 @@ const form = ref({
 })
 const result = ref<any>(null)
 const { t } = useI18n()
+const { getRecentAppId, setRecentAppId } = useRecentApp()
 
 const getSelectedApp = () => apps.value.find(app => app.id === form.value.appid) || null
-
-const getRememberedAppId = () => {
-  if (typeof window === 'undefined') return null
-  const raw = window.localStorage.getItem(RECENT_APP_ID_KEY)
-  if (!raw) return null
-  const parsed = Number(raw)
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : null
-}
-
-const rememberAppId = (appId: number | null) => {
-  if (typeof window === 'undefined') return
-  if (appId == null || appId <= 0) return
-  window.localStorage.setItem(RECENT_APP_ID_KEY, String(appId))
-}
 
 const showAccessToken = () => {
   if (!getSelectedApp()?.access_token) {
@@ -44,7 +31,7 @@ onMounted(async () => {
   try {
     const res = await getApps()
     apps.value = res.data
-    const rememberedAppId = getRememberedAppId()
+    const rememberedAppId = getRecentAppId()
     if (rememberedAppId && apps.value.some(app => app.id === rememberedAppId)) {
       form.value.appid = rememberedAppId
     }
@@ -62,7 +49,7 @@ const handleVerify = async () => {
     ElMessage.warning(t('message.verifyRequired'))
     return
   }
-  rememberAppId(form.value.appid)
+  setRecentAppId(form.value.appid)
   const app = getSelectedApp()
   if (!app?.access_token) {
     ElMessage.warning(t('message.appTokenMissing'))
@@ -88,7 +75,7 @@ const handleVerify = async () => {
     <el-form :model="form" label-width="100px">
       <el-form-item :label="t('verify.application')">
         <div class="app-select-row">
-          <el-select v-model="form.appid" :placeholder="t('verify.selectApp')" @change="rememberAppId">
+          <el-select v-model="form.appid" :placeholder="t('verify.selectApp')" @change="setRecentAppId">
             <el-option v-for="app in apps" :key="app.id" :label="app.name" :value="app.id" />
           </el-select>
           <el-button :disabled="!form.appid" @click="showAccessToken">

@@ -1,7 +1,7 @@
 <template>
   <div class="filter-editor">
     <div v-if="root" class="tree-container">
-      <FilterNode :node="root" :indent="0" @remove="handleRootRemove" />
+      <FilterNode :node="root" :indent="0" @remove="handleRootRemove" @change="commitTreeChange" />
     </div>
     <div v-else class="empty-state">
       <span class="empty-text">{{ t('filter.empty') }}</span>
@@ -13,7 +13,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import FilterNode from './FilterNode.vue'
-import { flatToTree, treeToFlat, type ExprNode, type TreeNode } from '@/utils/filter'
+import { flatToTree, treeToFlat, serializeExprNodes, type ExprNode, type TreeNode } from '@/utils/filter'
 import { useI18n } from '@/i18n'
 
 const props = defineProps<{
@@ -27,23 +27,26 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 const root = ref<TreeNode | null>(null)
+const lastCommittedSignature = ref('')
 
-watch(() => props.modelValue, (val) => {
-  // Sync from prop only if we don't have local changes or initial load
-  // Actually, better to parse always if it differs significantly?
-  // For simplicity: convert on mount or if external change implies reset.
-  // Here assuming one-way data flow for init, then internal state emits up.
-  if (val && val.length > 0) {
-    if (!root.value) {
-        root.value = flatToTree(val)
-    }
-  }
-}, { immediate: true })
+watch(
+  () => props.modelValue,
+  (val) => {
+    const nextSignature = serializeExprNodes(val)
+    if (nextSignature === lastCommittedSignature.value) return
+    lastCommittedSignature.value = nextSignature
+    root.value = val && val.length > 0 ? flatToTree(val) : null
+  },
+  { immediate: true }
+)
 
-watch(root, () => {
+const commitTreeChange = () => {
   const flat = treeToFlat(root.value)
+  const nextSignature = serializeExprNodes(flat)
+  if (nextSignature === lastCommittedSignature.value) return
+  lastCommittedSignature.value = nextSignature
   emit('update:modelValue', flat)
-}, { deep: true })
+}
 
 const createRoot = () => {
   root.value = {
@@ -52,10 +55,12 @@ const createRoot = () => {
     dtype: 1,
     children: []
   }
+  commitTreeChange()
 }
 
 const handleRootRemove = () => {
   root.value = null
+  commitTreeChange()
 }
 </script>
 

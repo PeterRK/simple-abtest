@@ -6,8 +6,14 @@
       </el-select>
 
       <template v-if="!isLogicOp(node.op)">
-        <el-input v-model="node.key" :placeholder="t('common.key')" style="width: 140px" />
-        <el-select v-model="node.dtype" :placeholder="t('filter.paramType')" style="width: 120px" :disabled="isInOp(node.op)">
+        <el-input v-model="node.key" :placeholder="t('common.key')" style="width: 140px" @update:model-value="emitChange" />
+        <el-select
+          v-model="node.dtype"
+          :placeholder="t('filter.paramType')"
+          style="width: 120px"
+          :disabled="isInOp(node.op)"
+          @change="emitChange"
+        >
           <el-option v-for="opt in dtypeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
         </el-select>
 
@@ -15,9 +21,9 @@
            <el-input v-model="ssInput" :placeholder="t('filter.param')" style="width: 180px" @change="updateSS" />
         </template>
         <template v-else>
-           <el-input v-if="node.dtype === 1" v-model="node.s" :placeholder="t('filter.param')" style="width: 180px" />
-           <el-input-number v-else-if="node.dtype === 2" v-model="node.i" :placeholder="t('filter.param')" style="width: 180px" :controls="false" />
-           <el-input-number v-else-if="node.dtype === 3" v-model="node.f" :placeholder="t('filter.param')" style="width: 180px" :controls="false" />
+           <el-input v-if="node.dtype === 1" v-model="node.s" :placeholder="t('filter.param')" style="width: 180px" @update:model-value="emitChange" />
+           <el-input-number v-else-if="node.dtype === 2" v-model="node.i" :placeholder="t('filter.param')" style="width: 180px" :controls="false" @update:model-value="emitChange" />
+           <el-input-number v-else-if="node.dtype === 3" v-model="node.f" :placeholder="t('filter.param')" style="width: 180px" :controls="false" @update:model-value="emitChange" />
         </template>
       </template>
 
@@ -32,6 +38,7 @@
         :node="child"
         :indent="20"
         @remove="removeChild(index)"
+        @change="emitChange"
       />
     </div>
   </div>
@@ -49,6 +56,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'remove'): void
+  (e: 'change'): void
 }>()
 
 const { t } = useI18n()
@@ -61,6 +69,7 @@ watch(() => props.node.ss, (val) => {
 
 const updateSS = (val: string) => {
   props.node.ss = val.split(',').map(s => s.trim()).filter(s => s)
+  emitChange()
 }
 
 const isLogicOp = (op: number) => [1, 2, 3].includes(op)
@@ -108,6 +117,7 @@ const handleOpChange = (val: number) => {
       props.node.dtype = 1
     }
   }
+  emitChange()
 }
 
 let idCounter = 0
@@ -120,10 +130,16 @@ const addChild = () => {
     dtype: 1,
     children: []
   })
+  emitChange()
 }
 
 const removeChild = (index: number) => {
   props.node.children.splice(index, 1)
+  emitChange()
+}
+
+const emitChange = () => {
+  emit('change')
 }
 </script>
 

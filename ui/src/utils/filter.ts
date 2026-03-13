@@ -1,4 +1,4 @@
-import type { ExprNode } from '@/api/types'
+import type { ExprNode } from '@/types'
 
 export type { ExprNode }
 
@@ -78,6 +78,28 @@ export const treeToFlat = (root: TreeNode | null): ExprNode[] => {
 
   visit(root)
   return nodes
+}
+
+export const serializeExprNodes = (nodes: ExprNode[] | undefined): string => {
+  if (!nodes || nodes.length === 0) return ''
+
+  return nodes
+    .map((node, index) => {
+      const child = node.child?.join(',') || ''
+      const ss = node.ss?.join(',') || ''
+      return [
+        index,
+        node.op,
+        node.dtype ?? '',
+        node.key ?? '',
+        node.s ?? '',
+        node.i ?? '',
+        node.f ?? '',
+        ss,
+        child
+      ].join('|')
+    })
+    .join('||')
 }
 
 export const OpTypes = {

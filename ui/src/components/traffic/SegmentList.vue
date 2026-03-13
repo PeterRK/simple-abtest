@@ -30,8 +30,8 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { deleteSeg, getSegment } from '@/api'
-import type { Layer, Segment } from '@/api/types'
+import { deleteSegment, getSegment } from '@/api'
+import type { Layer, Segment } from '@/types'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import GroupList from './GroupList.vue'
 import { useI18n } from '@/i18n'
@@ -102,7 +102,7 @@ const autoSelectSingleSegment = () => {
 const handleDelete = async (seg: Segment) => {
     try {
         await ElMessageBox.confirm(t('confirm.deleteSegment'), t('common.warning'), { type: 'warning' })
-        await deleteSeg(seg.id, {
+        await deleteSegment(seg.id, {
             lyr_id: props.layer.id,
             lyr_ver: props.layer.version!,
             version: seg.version!
