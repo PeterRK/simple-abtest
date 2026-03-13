@@ -109,16 +109,16 @@ func SetLogLevel(lv LogLevel) {
 
 var logTraceNum uint64
 
-// ContextLogger logs with a unique trace id and optional context label.
+// ContextLogger logs with a unique trace sn and optional context label.
 type ContextLogger struct {
-	id  uint64
+	sn  uint64
 	ctx string
 }
 
 // NewContextLogger returns a ContextLogger with the provided context label.
 func NewContextLogger(ctx string) *ContextLogger {
 	return &ContextLogger{
-		id:  atomic.AddUint64(&logTraceNum, 1),
+		sn:  atomic.AddUint64(&logTraceNum, 1),
 		ctx: ctx,
 	}
 }
@@ -126,36 +126,36 @@ func NewContextLogger(ctx string) *ContextLogger {
 // Debug logs a debug message with the context trace fields.
 func (l *ContextLogger) Debug(msg string) {
 	if len(l.ctx) == 0 {
-		logger.sugar.Debugw(msg, "id", l.id)
+		logger.sugar.Debugw(msg, "sn", l.sn)
 	} else {
-		logger.sugar.Debugw(msg, "id", l.id, "ctx", l.ctx)
+		logger.sugar.Debugw(msg, "sn", l.sn, "ctx", l.ctx)
 	}
 }
 
 // Info logs an info message with the context trace fields.
 func (l *ContextLogger) Info(msg string) {
 	if len(l.ctx) == 0 {
-		logger.sugar.Infow(msg, "id", l.id)
+		logger.sugar.Infow(msg, "sn", l.sn)
 	} else {
-		logger.sugar.Infow(msg, "id", l.id, "ctx", l.ctx)
+		logger.sugar.Infow(msg, "sn", l.sn, "ctx", l.ctx)
 	}
 }
 
 // Warn logs a warning message with the context trace fields.
 func (l *ContextLogger) Warn(msg string) {
 	if len(l.ctx) == 0 {
-		logger.sugar.Warnw(msg, "id", l.id)
+		logger.sugar.Warnw(msg, "sn", l.sn)
 	} else {
-		logger.sugar.Warnw(msg, "id", l.id, "ctx", l.ctx)
+		logger.sugar.Warnw(msg, "sn", l.sn, "ctx", l.ctx)
 	}
 }
 
 // Error logs an error message with the context trace fields.
 func (l *ContextLogger) Error(msg string) {
 	if len(l.ctx) == 0 {
-		logger.sugar.Errorw(msg, "id", l.id)
+		logger.sugar.Errorw(msg, "sn", l.sn)
 	} else {
-		logger.sugar.Errorw(msg, "id", l.id, "ctx", l.ctx)
+		logger.sugar.Errorw(msg, "sn", l.sn, "ctx", l.ctx)
 	}
 }
 
