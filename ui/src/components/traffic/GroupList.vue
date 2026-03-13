@@ -107,6 +107,10 @@ const props = defineProps<{
   segment: Segment
 }>()
 
+const emit = defineEmits<{
+  (e: 'update:segment', value: Segment): void
+}>()
+
 const groups = computed(() => props.segment.group || [])
 const selectedGroupId = ref<number | null>(null)
 const selectedGroupDetail = ref<Group | null>(null)
@@ -120,6 +124,20 @@ const configDays = ref(7)
 const configContentCache = new Map<number, string>()
 const configLoadInFlight = new Map<number, Promise<string>>()
 const { t } = useI18n()
+const isCancelAction = (error: unknown) => error === 'cancel' || error === 'close'
+
+const emitSegmentUpdate = (nextSegment: Segment) => {
+  emit('update:segment', {
+    ...nextSegment,
+    group: (nextSegment.group || []).map(group => ({ ...group }))
+  })
+}
+
+const replaceGroupInSegment = (segment: Segment, nextGroup: Group) => ({
+  ...segment,
+  group: (segment.group || []).map(group => (group.id === nextGroup.id ? { ...nextGroup } : { ...group }))
+})
+
 const buildForceHitList = (text: string) =>
   text
     .split('\n')
@@ -185,6 +203,7 @@ const loadGroupDetail = async (grpId: number) => {
     }
   } catch (e) {
     selectedGroupDetail.value = null
+    ElMessage.error(t('message.failedLoadGroup'))
   }
 }
 
@@ -194,6 +213,29 @@ watch(
     selectedGroupId.value = null
     resetGroupState()
   }
+)
+
+watch(
+  () => props.segment.group,
+  (nextGroups) => {
+    if (!selectedGroupId.value) return
+    const groups = nextGroups || []
+    const activeGroup = groups.find(group => group.id === selectedGroupId.value)
+    if (!activeGroup) {
+      selectedGroupId.value = null
+      resetGroupState()
+      return
+    }
+    if (selectedGroupDetail.value?.id === activeGroup.id) {
+      selectedGroupDetail.value = {
+        ...selectedGroupDetail.value,
+        ...activeGroup,
+        force_hit: selectedGroupDetail.value.force_hit,
+        config: selectedGroupDetail.value.config
+      }
+    }
+  },
+  { deep: true }
 )
 
 const selectGroup = (grp: Group) => {
@@ -224,11 +266,7 @@ const openGroupDialog = (type: 'create') => {
 }
 
 const bumpSegmentVersion = () => {
-  if (typeof props.segment.version === 'number') {
-    props.segment.version += 1
-    return
-  }
-  props.segment.version = 1
+  return typeof props.segment.version === 'number' ? props.segment.version + 1 : 1
 }
 
 const handleCreate = async () => {
@@ -239,16 +277,20 @@ const handleCreate = async () => {
       seg_ver: segmentVersion,
       name: form.value.name
     })
-    if (!props.segment.group) props.segment.group = []
-    props.segment.group.push({
+    const nextGroup: Group = {
       ...res.data,
       version: res.data.version ?? 0
-    })
-    bumpSegmentVersion()
+    }
+    const nextSegment: Segment = {
+      ...props.segment,
+      version: bumpSegmentVersion(),
+      group: [...(props.segment.group || []), nextGroup]
+    }
+    emitSegmentUpdate(nextSegment)
     ElMessage.success(t('message.groupCreated'))
     dialogVisible.value = false
   } catch (e) {
-    // ignore
+    ElMessage.error(t('message.createFailed'))
   }
 }
 
@@ -293,7 +335,7 @@ const handleUpdate = async () => {
     }
     ElMessage.success(t('message.groupUpdated'))
     const nextVersion = selectedGroupDetail.value.version + 1
-    selectedGroupDetail.value = {
+    const nextGroupDetail: Group = {
       ...selectedGroupDetail.value,
       name: groupForm.value.name,
       cfg_id: nextConfigId,
@@ -302,21 +344,14 @@ const handleUpdate = async () => {
       version: nextVersion,
       config: nextConfigContent
     }
+    selectedGroupDetail.value = nextGroupDetail
     selectedConfigContent.value = nextConfigContent
     selectedConfigId.value = nextConfigId
     configContentCache.set(nextConfigId, nextConfigContent)
     if (createdConfigId != null) {
       configHistory.value = [{ id: createdConfigId, stamp: createdConfigStamp }]
     }
-    if (props.segment.group) {
-      const target = props.segment.group.find(item => item.id === selectedGroupDetail.value?.id)
-      if (target) {
-        target.name = groupForm.value.name
-        target.cfg_id = nextConfigId
-        target.force_hit = forceHit
-        target.version = nextVersion
-      }
-    }
+    emitSegmentUpdate(replaceGroupInSegment(props.segment, nextGroupDetail))
   } catch (e) {
     ElMessage.error(t('message.updateFailedRefresh'))
   }
@@ -332,17 +367,18 @@ const handleDelete = async (grp: Group) => {
             seg_ver: segmentVersion,
             version: groupVersion
         })
-        if (props.segment.group) {
-          props.segment.group = props.segment.group.filter(item => item.id !== grp.id)
-        }
+        emitSegmentUpdate({
+          ...props.segment,
+          version: bumpSegmentVersion(),
+          group: (props.segment.group || []).filter(item => item.id !== grp.id)
+        })
         if (selectedGroupId.value === grp.id) {
           selectedGroupId.value = null
           resetGroupState()
         }
-        bumpSegmentVersion()
         ElMessage.success(t('message.groupDeleted'))
     } catch (e) {
-        // ignore
+        if (!isCancelAction(e)) ElMessage.error(t('message.deleteFailed'))
     }
 }
 
@@ -351,7 +387,7 @@ const handleShuffle = async () => {
     await shuffleSegment(props.segment.id)
     ElMessage.success(t('message.segmentSeedShuffled'))
   } catch (e) {
-    // ignore
+    ElMessage.error(t('message.operationFailed'))
   }
 }
 
@@ -380,7 +416,7 @@ const validateRebalance = (targetGroupId: number, nextShare: number) => {
 }
 
 const applyLocalRebalance = (targetGroupId: number, nextShare: number) => {
-  const list = props.segment.group || []
+  const list = (props.segment.group || []).map(item => ({ ...item }))
   const target = list.find(item => item.id === targetGroupId)
   if (!target) return
   const prevShare = target.share
@@ -395,7 +431,11 @@ const applyLocalRebalance = (targetGroupId: number, nextShare: number) => {
   } else if (defaultGroup && selectedGroupDetail.value?.id === defaultGroup.id) {
     selectedGroupDetail.value.share = defaultGroup.share
   }
-  bumpSegmentVersion()
+  emitSegmentUpdate({
+    ...props.segment,
+    version: bumpSegmentVersion(),
+    group: list
+  })
 }
 
 const openRebalance = (grp: Group) => {
@@ -423,7 +463,7 @@ const handleRebalance = async () => {
         ElMessage.success(t('message.shareUpdated'))
         rebalanceVisible.value = false
     } catch (e) {
-        // ignore
+        ElMessage.error(t('message.rebalanceFailedRefresh'))
     }
 }
 
@@ -449,7 +489,7 @@ const loadConfigs = async (grpId: number, begin?: number) => {
     const res = await getConfigs(grpId, begin)
     configHistory.value = res.data || []
   } catch (e) {
-    // ignore
+    ElMessage.error(t('message.failedLoadConfigs'))
   }
 }
 
@@ -493,7 +533,7 @@ const handleSelectConfig = async (cfg: Config | null) => {
       newConfigContent.value = content
     }
   } catch (e) {
-    // ignore
+    ElMessage.error(t('message.failedLoadConfigContent'))
   } finally {
     if (configLoadInFlight.get(cfgId) === pending) {
       configLoadInFlight.delete(cfgId)

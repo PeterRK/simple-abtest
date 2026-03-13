@@ -30,6 +30,15 @@ const { isLoggedIn } = useAuth()
 const { getRecentAppId, setRecentAppId } = useRecentApp()
 const normalizeText = (text?: string) => text || ''
 
+type AppSnapshot = {
+  id: number
+  name: string
+  access_token?: string
+  version: number
+  description?: string
+  experiment: Experiment[]
+}
+
 const isAppNameDirty = computed(() => {
   if (appDialogMode.value !== 'detail' || !currentApp.value) return false
   return currentApp.value.name !== appForm.value.name
@@ -41,6 +50,51 @@ const isAppDescriptionDirty = computed(() => {
 })
 
 const isAppDirty = computed(() => isAppNameDirty.value || isAppDescriptionDirty.value)
+
+const applyAppSnapshot = (snapshot: AppSnapshot) => {
+  const nextExperiments = (snapshot.experiment || []).map(exp => ({ ...exp }))
+  experiments.value = nextExperiments
+  const statusMap = new Map<number, number>()
+  for (const exp of nextExperiments) {
+    statusMap.set(exp.id, exp.status)
+  }
+  experimentStatusMap.value = statusMap
+  currentApp.value = {
+    id: snapshot.id,
+    name: snapshot.name,
+    access_token: snapshot.access_token,
+    version: snapshot.version,
+    description: snapshot.description,
+    experiment: nextExperiments.map(exp => ({ ...exp }))
+  }
+  const index = apps.value.findIndex(app => app.id === snapshot.id)
+  if (index !== -1) {
+    const app = apps.value[index]
+    if (app) {
+      app.name = snapshot.name
+      app.access_token = snapshot.access_token
+      app.version = snapshot.version
+      app.description = snapshot.description
+      app.experiment = nextExperiments.map(exp => ({ ...exp }))
+    }
+  }
+}
+
+const consumeRouteAppSnapshot = () => {
+  const state = window.history.state as { appSnapshot?: AppSnapshot } | null
+  const snapshot = state?.appSnapshot
+  if (!snapshot || snapshot.id !== selectedAppId.value) return false
+  applyAppSnapshot(snapshot)
+  window.history.replaceState({ ...state, appSnapshot: undefined }, '')
+  return true
+}
+
+const syncExperimentsForSelectedApp = () => {
+  if (consumeRouteAppSnapshot()) return
+  if (selectedAppId.value) {
+    loadExperiments()
+  }
+}
 
 const loadApps = async () => {
   try {
@@ -219,15 +273,32 @@ const handleExpSubmit = async () => {
     return
   }
   try {
-    await createExp({
+    const res = await createExp({
       app_id: app.id,
       app_ver: app.version,
       name: expForm.value.name,
       description: expForm.value.description
     })
+    const created = res.data
+    const nextExperiment: Experiment = {
+      ...created,
+      app_id: app.id
+    }
+    const nextExperiments = [...experiments.value, nextExperiment]
+    experiments.value = nextExperiments
+    experimentStatusMap.value = new Map(experimentStatusMap.value).set(nextExperiment.id, nextExperiment.status)
+    app.version = app.version + 1
+    app.experiment = nextExperiments.map(exp => ({ ...exp }))
+    if (currentApp.value?.id === app.id) {
+      currentApp.value = {
+        ...currentApp.value,
+        version: app.version,
+        experiment: nextExperiments.map(exp => ({ ...exp }))
+      }
+    }
     ElMessage.success(t('message.experimentCreated'))
     expDialogVisible.value = false
-    loadExperiments()
+    expForm.value = { name: '', description: '' }
   } catch (e) {
     ElMessage.error(t('message.createFailed'))
   }
@@ -258,12 +329,10 @@ onMounted(() => {
     if (Number.isFinite(appId) && appId > 0) {
       selectedAppId.value = appId
       setRecentAppId(appId)
-      loadExperiments()
+      syncExperimentsForSelectedApp()
       return
     }
-    if (selectedAppId.value) {
-      loadExperiments()
-    }
+    syncExperimentsForSelectedApp()
   })
 })
 
@@ -281,7 +350,7 @@ watch(
     if (!Number.isFinite(appId) || appId <= 0) return
     selectedAppId.value = appId
     loadApps().then(() => {
-      loadExperiments()
+      syncExperimentsForSelectedApp()
     })
   }
 )
@@ -297,9 +366,7 @@ watch(
       return
     }
     loadApps().then(() => {
-      if (selectedAppId.value) {
-        loadExperiments()
-      }
+      syncExperimentsForSelectedApp()
     })
   }
 )

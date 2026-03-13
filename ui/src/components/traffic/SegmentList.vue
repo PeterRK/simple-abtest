@@ -23,7 +23,7 @@
     </div>
 
     <div v-if="selectedSegmentDetail" class="segment-detail">
-      <GroupList :segment="selectedSegmentDetail" />
+      <GroupList :segment="selectedSegmentDetail" @update:segment="handleSegmentUpdate" />
     </div>
   </div>
 </template>
@@ -40,13 +40,25 @@ const props = defineProps<{
   layer: Layer
 }>()
 
+const emit = defineEmits<{
+  (e: 'update:layer', value: Layer): void
+}>()
+
 const segmentDetails = ref<Record<number, Segment>>({})
 const segments = computed(() => props.layer.segment || [])
 const selectedSegmentId = ref<number | null>(null)
 const { t } = useI18n()
+const isCancelAction = (error: unknown) => error === 'cancel' || error === 'close'
 const selectedSegmentDetail = computed(() =>
   selectedSegmentId.value != null ? segmentDetails.value[selectedSegmentId.value] || null : null
 )
+
+const emitLayerUpdate = (nextLayer: Layer) => {
+  emit('update:layer', {
+    ...nextLayer,
+    segment: (nextLayer.segment || []).map(segment => ({ ...segment }))
+  })
+}
 
 const normalizeSegmentDetail = (segment: Segment, fallback?: Segment): Segment => ({
   ...segment,
@@ -68,7 +80,10 @@ const syncSegmentSummaryVersion = (segmentId: number, version: number) => {
   if (target.version === version) return
   const next = [...list]
   next[idx] = { ...target, version }
-  props.layer.segment = next
+  emitLayerUpdate({
+    ...props.layer,
+    segment: next
+  })
 }
 
 const selectSegment = (seg: Segment) => {
@@ -88,7 +103,7 @@ const selectSegment = (seg: Segment) => {
       syncSegmentSummaryVersion(seg.id, detail.version)
     })
     .catch(() => {
-      // ignore
+      ElMessage.error(t('message.failedLoadSegment'))
     })
 }
 
@@ -107,10 +122,11 @@ const handleDelete = async (seg: Segment) => {
             lyr_ver: props.layer.version!,
             version: seg.version!
         })
-        props.layer.segment = (props.layer.segment || []).filter(item => item.id !== seg.id)
-        if (typeof props.layer.version === 'number') {
-          props.layer.version += 1
-        }
+        emitLayerUpdate({
+          ...props.layer,
+          version: typeof props.layer.version === 'number' ? props.layer.version + 1 : 1,
+          segment: (props.layer.segment || []).filter(item => item.id !== seg.id)
+        })
         if (selectedSegmentId.value === seg.id) {
           selectedSegmentId.value = null
         }
@@ -119,7 +135,7 @@ const handleDelete = async (seg: Segment) => {
         segmentDetails.value = nextDetails
         ElMessage.success(t('message.segmentDeleted'))
     } catch (e) {
-        // ignore
+        if (!isCancelAction(e)) ElMessage.error(t('message.deleteFailed'))
     }
 }
 
@@ -163,6 +179,19 @@ watch(
     syncSegmentSummaryVersion(segmentId, version)
   }
 )
+
+const handleSegmentUpdate = (nextSegment: Segment) => {
+  segmentDetails.value = {
+    ...segmentDetails.value,
+    [nextSegment.id]: nextSegment
+  }
+  emitLayerUpdate({
+    ...props.layer,
+    segment: (props.layer.segment || []).map(segment =>
+      segment.id === nextSegment.id ? { ...nextSegment } : { ...segment }
+    )
+  })
+}
 </script>
 
 <style scoped>

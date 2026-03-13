@@ -39,6 +39,11 @@ const messages: Record<Locale, MessageTree> = {
     message: {
       failedLoadApps: '加载应用失败',
       failedLoadExperiments: '加载实验失败',
+      failedLoadLayer: '加载 Layer 失败',
+      failedLoadSegment: '加载 Segment 失败',
+      failedLoadGroup: '加载 Group 失败',
+      failedLoadConfigs: '加载配置历史失败',
+      failedLoadConfigContent: '加载配置内容失败',
       appCreated: '应用已创建',
       appUpdated: '应用已更新',
       appDeleted: '应用已删除',
@@ -240,6 +245,11 @@ const messages: Record<Locale, MessageTree> = {
     message: {
       failedLoadApps: 'Failed to load apps',
       failedLoadExperiments: 'Failed to load experiments',
+      failedLoadLayer: 'Failed to load layer',
+      failedLoadSegment: 'Failed to load segment',
+      failedLoadGroup: 'Failed to load group',
+      failedLoadConfigs: 'Failed to load config history',
+      failedLoadConfigContent: 'Failed to load config content',
       appCreated: 'App created',
       appUpdated: 'App updated',
       appDeleted: 'App deleted',

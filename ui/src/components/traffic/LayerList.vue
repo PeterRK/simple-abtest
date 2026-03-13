@@ -19,7 +19,7 @@
               <el-button size="small" @click="openRebalanceDialog(layer)">{{ t('layer.rebalanceSegment') }}</el-button>
             </div>
           </div>
-          <SegmentList :layer="layer" />
+          <SegmentList :layer="layer" @update:layer="handleLayerUpdate" />
         </div>
       </el-collapse-item>
     </el-collapse>
@@ -75,6 +75,11 @@ const props = defineProps<{
   experiment: Experiment | null
 }>()
 
+const emit = defineEmits<{
+  (e: 'update:layers', value: Layer[]): void
+  (e: 'bump-experiment-version'): void
+}>()
+
 const activeLayers = ref<number[]>([])
 const layers = ref<Layer[]>([])
 const loadedLayerIds = ref(new Set<number>())
@@ -84,22 +89,26 @@ const { t } = useI18n()
 
 const dialogVisible = ref(false)
 const form = ref({ name: '' })
+const isCancelAction = (error: unknown) => error === 'cancel' || error === 'close'
 
 const openLayerDialog = () => {
   form.value = { name: '' }
   dialogVisible.value = true
 }
 
-const bumpExperimentVersion = () => {
-  if (props.experiment && typeof props.experiment.version === 'number') {
-    props.experiment.version += 1
-  }
-}
+const normalizeLayer = (layer: Layer): Layer => ({
+  ...layer,
+  segment: (layer.segment || []).map(seg => ({
+    ...seg,
+    version: seg.version ?? 0
+  }))
+})
 
-const syncLayersToExperiment = () => {
-  if (!props.experiment) return
+const emitLayersUpdate = (nextLayers: Layer[]) => {
+  const normalizedLayers = nextLayers.map(normalizeLayer)
+  layers.value = normalizedLayers
   localLayerSyncing.value = true
-  props.experiment.layer = layers.value.map(layer => ({ ...layer }))
+  emit('update:layers', normalizedLayers.map(layer => ({ ...layer })))
 }
 
 defineExpose({
@@ -115,13 +124,7 @@ const loadLayers = () => {
     return
   }
   const currentActiveSet = new Set(activeLayers.value)
-  layers.value = props.experiment.layer.map(layer => ({
-    ...layer,
-    segment: (layer.segment || []).map(seg => ({
-      ...seg,
-      version: seg.version ?? 0
-    }))
-  }))
+  layers.value = props.experiment.layer.map(normalizeLayer)
   const validLayerIds = new Set(layers.value.map(layer => layer.id))
   const nextActive = activeLayers.value.filter(layerId => validLayerIds.has(layerId))
   if (layers.value.length === 1 && nextActive.length === 0) {
@@ -140,14 +143,8 @@ const loadLayers = () => {
 }
 
 const updateLayerDetail = (detail: Layer) => {
-  const normalizedDetail: Layer = {
-    ...detail,
-    segment: (detail.segment || []).map(seg => ({
-      ...seg,
-      version: seg.version ?? 0
-    }))
-  }
-  layers.value = layers.value.map(layer => (layer.id === normalizedDetail.id ? normalizedDetail : layer))
+  const normalizedDetail = normalizeLayer(detail)
+  emitLayersUpdate(layers.value.map(layer => (layer.id === normalizedDetail.id ? normalizedDetail : layer)))
   layerNameMap.value.set(normalizedDetail.id, normalizedDetail.name)
 }
 
@@ -160,7 +157,7 @@ const fetchLayerDetail = async (layerId: number, force = false) => {
     updateLayerDetail(res.data)
     loadedLayerIds.value.add(layerId)
   } catch (e) {
-    // ignore
+    ElMessage.error(t('message.failedLoadLayer'))
   }
 }
 
@@ -176,14 +173,13 @@ const handleCreate = async () => {
       ...res.data,
       segment: res.data.segment || []
     }
-    layers.value = [...layers.value, createdLayer]
+    emitLayersUpdate([...layers.value, createdLayer])
     layerNameMap.value.set(createdLayer.id, createdLayer.name)
-    syncLayersToExperiment()
-    bumpExperimentVersion()
+    emit('bump-experiment-version')
     ElMessage.success(t('message.layerCreated'))
     dialogVisible.value = false
   } catch (e) {
-    // ignore
+    ElMessage.error(t('message.createFailed'))
   }
 }
 
@@ -196,8 +192,9 @@ const handleUpdateLayer = async (layer: Layer) => {
       version: layer.version
     })
     ElMessage.success(t('message.layerUpdated'))
-    layer.version = layer.version + 1
-    layerNameMap.value.set(layer.id, layer.name)
+    const nextLayer = { ...layer, version: layer.version + 1 }
+    emitLayersUpdate(layers.value.map(item => (item.id === nextLayer.id ? nextLayer : item)))
+    layerNameMap.value.set(nextLayer.id, nextLayer.name)
   } catch (e) {
     ElMessage.error(t('message.updateFailedRefresh'))
   }
@@ -212,15 +209,14 @@ const handleDeleteLayer = async (layer: Layer) => {
             exp_ver: props.experiment.version!,
             version: layer.version!
         })
-        layers.value = layers.value.filter(item => item.id !== layer.id)
+        emitLayersUpdate(layers.value.filter(item => item.id !== layer.id))
         activeLayers.value = activeLayers.value.filter(id => id !== layer.id)
         loadedLayerIds.value.delete(layer.id)
         layerNameMap.value.delete(layer.id)
-        syncLayersToExperiment()
-        bumpExperimentVersion()
+        emit('bump-experiment-version')
         ElMessage.success(t('message.layerDeleted'))
     } catch (e) {
-        // ignore
+        if (!isCancelAction(e)) ElMessage.error(t('message.deleteFailed'))
     }
 }
 
@@ -236,13 +232,11 @@ const handleAddSegment = async (layer: Layer) => {
       segment: nextSegments,
       version: layer.version + 1
     }
-    layers.value = layers.value.map(item => (item.id === layer.id ? nextLayer : item))
+    emitLayersUpdate(layers.value.map(item => (item.id === layer.id ? nextLayer : item)))
     layerNameMap.value.set(nextLayer.id, nextLayer.name)
-    syncLayersToExperiment()
-    bumpExperimentVersion()
     ElMessage.success(t('message.segmentCreated'))
   } catch (e) {
-    // ignore
+    ElMessage.error(t('message.createFailed'))
   }
 }
 
@@ -305,17 +299,21 @@ const handleRebalance = async () => {
       end: item.end,
       version: versionMap.get(item.id) || 0
     }))
-    rebalanceTargetLayer.value.segment = nextSegments
-    rebalanceTargetLayer.value.version = rebalanceTargetLayer.value.version! + 1
-    layers.value = layers.value.map(layer =>
-      layer.id === rebalanceTargetLayer.value?.id
-        ? { ...layer, segment: nextSegments, version: rebalanceTargetLayer.value.version! }
-        : layer
-    )
+    const nextLayer: Layer = {
+      ...rebalanceTargetLayer.value,
+      segment: nextSegments,
+      version: rebalanceTargetLayer.value.version! + 1
+    }
+    rebalanceTargetLayer.value = nextLayer
+    emitLayersUpdate(layers.value.map(layer => (layer.id === nextLayer.id ? nextLayer : layer)))
     rebalanceVisible.value = false
   } catch (e) {
     ElMessage.error(t('message.rebalanceFailedRefresh'))
   }
+}
+
+const handleLayerUpdate = (nextLayer: Layer) => {
+  emitLayersUpdate(layers.value.map(layer => (layer.id === nextLayer.id ? normalizeLayer(nextLayer) : layer)))
 }
 
 watch(

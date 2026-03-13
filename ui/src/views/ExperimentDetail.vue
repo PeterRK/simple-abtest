@@ -2,12 +2,27 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getExp, updateExp, shuffleExp, deleteExp, getApp, getAppPrivileges, grantAppPrivilege } from '@/api'
-import type { Experiment } from '@/types'
+import type { Application, Experiment } from '@/types'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import LayerList from '@/components/traffic/LayerList.vue'
 import FilterEditor from '@/components/FilterEditor.vue'
 import { serializeExprNodes, validateExprNodes } from '@/utils/filter'
 import { useI18n } from '@/i18n'
+
+type AppSnapshot = {
+  id: number
+  name: string
+  access_token?: string
+  description?: string
+  version: number
+  experiment: {
+    id: number
+    status: number
+    version: number
+    name: string
+    description?: string
+  }[]
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -63,7 +78,7 @@ const loadExp = async () => {
   try {
     const res = await getExp(expId)
     experiment.value = res.data
-    appVersion.value = typeof res.data.app_ver === 'number' ? res.data.app_ver : null
+    appVersion.value = null
     syncSnapshot(res.data)
   } catch (e) {
     ElMessage.error(t('message.failedLoadExperiments'))
@@ -109,14 +124,23 @@ const handleCreateLayer = () => {
   layerListRef.value?.openLayerDialog()
 }
 
-const resolveAppVersion = async () => {
+const handleLayersUpdate = (nextLayers: Experiment['layer']) => {
+  if (!experiment.value) return
+  experiment.value.layer = nextLayers
+}
+
+const bumpExperimentVersion = () => {
+  if (!experiment.value) return
+  experiment.value.version += 1
+}
+
+const resolveAppDetail = async (): Promise<Application | null> => {
   if (!appId.value) return null
-  if (typeof appVersion.value === 'number') return appVersion.value
   try {
     const appRes = await getApp(appId.value)
     if (typeof appRes.data.version === 'number') {
       appVersion.value = appRes.data.version
-      return appRes.data.version
+      return appRes.data
     }
   } catch (e) {
     return null
@@ -130,8 +154,8 @@ const handleDelete = async () => {
     ElMessage.error(t('message.appInfoMissing'))
     return
   }
-  const resolvedAppVersion = await resolveAppVersion()
-  if (resolvedAppVersion == null) {
+  const resolvedApp = await resolveAppDetail()
+  if (!resolvedApp || typeof resolvedApp.version !== 'number') {
     ElMessage.error(t('message.appInfoMissing'))
     return
   }
@@ -139,15 +163,35 @@ const handleDelete = async () => {
     await ElMessageBox.confirm(t('confirm.deleteExperiment'), t('common.warning'), { type: 'warning' })
     await deleteExp(experiment.value.id, {
       app_id: appId.value,
-      app_ver: resolvedAppVersion,
+      app_ver: resolvedApp.version,
       version: experiment.value.version
     })
+    const nextExperiments = (resolvedApp.experiment || [])
+      .filter(item => item.id !== experiment.value?.id)
+      .map(item => ({
+        id: item.id,
+        status: item.status,
+        version: item.version,
+        name: item.name,
+        description: item.description
+      }))
+    const appSnapshot: AppSnapshot = {
+      id: resolvedApp.id,
+      name: resolvedApp.name,
+      access_token: resolvedApp.access_token,
+      description: resolvedApp.description,
+      version: resolvedApp.version + 1,
+      experiment: nextExperiments
+    }
     ElMessage.success(t('message.experimentDeleted'))
     router.push({
       path: '/',
       query: {
         app_id: String(appId.value),
         refresh: String(Date.now())
+      },
+      state: {
+        appSnapshot
       }
     })
   } catch (e) {
@@ -253,7 +297,12 @@ onMounted(() => {
     </div>
 
     <div class="section">
-      <LayerList ref="layerListRef" :experiment="experiment" />
+      <LayerList
+        ref="layerListRef"
+        :experiment="experiment"
+        @update:layers="handleLayersUpdate"
+        @bump-experiment-version="bumpExperimentVersion"
+      />
     </div>
 
     <el-dialog v-model="privilegeDialogVisible" :title="t('detail.privilegeTitle')" width="680px">
