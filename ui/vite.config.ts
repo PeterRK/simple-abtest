@@ -11,7 +11,7 @@ export default defineConfig({
   plugins: [
     vue(),
     AutoImport({
-      resolvers: [ElementPlusResolver()],
+      resolvers: [ElementPlusResolver({ directives: true })],
     }),
     Components({
       resolvers: [ElementPlusResolver()],
@@ -20,6 +20,18 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))
+    }
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+          if (id.includes('vue-router')) return 'vue-router'
+          if (id.includes('/vue/')) return 'vue'
+          if (id.includes('axios')) return 'axios'
+        }
+      }
     }
   },
   server: {

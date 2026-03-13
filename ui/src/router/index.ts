@@ -1,7 +1,4 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import ExperimentList from '@/views/ExperimentList.vue'
-import ExperimentDetail from '@/views/ExperimentDetail.vue'
-import OnlineVerify from '@/views/OnlineVerify.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -9,18 +6,18 @@ const router = createRouter({
     {
       path: '/',
       name: 'ExperimentList',
-      component: ExperimentList
+      component: () => import('@/views/ExperimentList.vue')
     },
     {
       path: '/experiment/:id',
       name: 'ExperimentDetail',
-      component: ExperimentDetail,
+      component: () => import('@/views/ExperimentDetail.vue'),
       props: true
     },
     {
       path: '/verify',
       name: 'OnlineVerify',
-      component: OnlineVerify
+      component: () => import('@/views/OnlineVerify.vue')
     }
   ]
 })
