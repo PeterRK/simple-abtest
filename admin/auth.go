@@ -16,6 +16,9 @@ const (
 	sessionTTL   = 30 * time.Minute
 	privCacheTTL = 10 * time.Minute
 	relationTTL  = uint32((24*time.Hour)/time.Second) * 7
+
+	sessionUidCookieName   = "SESSION_UID"
+	sessionTokenCookieName = "SESSION_TOKEN"
 )
 
 var authSql struct {
@@ -236,14 +239,45 @@ func initSession(ctx *Context, uid uint32) (string, error) {
 	return token, nil
 }
 
+func isSecureRequest(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	return r.Header.Get("X-Forwarded-Proto") == "https"
+}
+
+func buildSessionCookie(r *http.Request, name, value string) *http.Cookie {
+	return &http.Cookie{
+		Name:     name,
+		Value:    value,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   isSecureRequest(r),
+		MaxAge:   int(sessionTTL / time.Second),
+	}
+}
+
+func setSessionCookies(w http.ResponseWriter, r *http.Request, uid uint32, token string) {
+	http.SetCookie(w, buildSessionCookie(r, sessionUidCookieName, strconv.FormatUint(uint64(uid), 10)))
+	http.SetCookie(w, buildSessionCookie(r, sessionTokenCookieName, token))
+}
+
 func verifySession(ctx *Context, w http.ResponseWriter, r *http.Request) (uint32, bool) {
-	uidText := r.Header.Get("SESSION_UID")
-	token := r.Header.Get("SESSION_TOKEN")
-	if len(uidText) == 0 || len(token) == 0 {
-		ctx.Debug("auth session missing credentials")
+	uidCookie, err := r.Cookie(sessionUidCookieName)
+	if err != nil {
+		ctx.Debug("auth session missing uid cookie")
 		w.WriteHeader(http.StatusUnauthorized)
 		return 0, false
 	}
+	tokenCookie, err := r.Cookie(sessionTokenCookieName)
+	if err != nil {
+		ctx.Debug("auth session missing token cookie")
+		w.WriteHeader(http.StatusUnauthorized)
+		return 0, false
+	}
+	uidText := uidCookie.Value
+	token := tokenCookie.Value
 
 	uid64, err := strconv.ParseUint(uidText, 10, 32)
 	if err != nil {
@@ -276,6 +310,7 @@ func verifySession(ctx *Context, w http.ResponseWriter, r *http.Request) (uint32
 		w.WriteHeader(http.StatusInternalServerError)
 		return 0, false
 	}
+	setSessionCookies(w, r, uid, token)
 	return uid, true
 }
 

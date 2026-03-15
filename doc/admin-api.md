@@ -10,7 +10,7 @@ This document describes the HTTP endpoints exposed by the `admin` service.
 
 ### Session Authentication
 
-Protected endpoints require these headers:
+Protected endpoints require `HttpOnly` cookies:
 
 - `SESSION_UID`: user id (uint32)
 - `SESSION_TOKEN`: session token
@@ -19,6 +19,8 @@ Session is issued by:
 
 - `POST /api/user`
 - `POST /api/user/login`
+
+Cookies are set with `HttpOnly`, `SameSite=Lax`, `Path=/`, and `Secure` on HTTPS requests.
 
 If missing/invalid/expired session:
 
@@ -72,8 +74,7 @@ Response `200 OK`:
 
 ```json
 {
-  "uid": 1,
-  "token": "<session-token>"
+  "uid": 1
 }
 ```
 
@@ -98,8 +99,7 @@ Response `200 OK`:
 
 ```json
 {
-  "uid": 1,
-  "token": "<session-token>"
+  "uid": 1
 }
 ```
 

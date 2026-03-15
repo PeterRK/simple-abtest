@@ -1,24 +1,15 @@
 import axios from 'axios'
 import type { Application, Experiment, Layer, Segment, Group, Config } from '@/types'
 import type { ExprNode } from '@/types'
-import { clearSession, useAuth } from '@/auth'
+import { clearSession } from '@/auth'
 
 const adminApi = axios.create({
-  baseURL: '/api'
+  baseURL: '/api',
+  withCredentials: true
 })
 
 const engineApi = axios.create({
   baseURL: '/engine'
-})
-
-adminApi.interceptors.request.use((config) => {
-  const { session } = useAuth()
-  if (session.value) {
-    config.headers = config.headers || {}
-    config.headers.SESSION_UID = String(session.value.uid)
-    config.headers.SESSION_TOKEN = session.value.token
-  }
-  return config
 })
 
 adminApi.interceptors.response.use(
@@ -37,9 +28,9 @@ adminApi.interceptors.response.use(
 
 // User
 export const registerUser = (data: { name: string; password: string }) =>
-  adminApi.post<{ uid: number; token: string }>('/user', data)
+  adminApi.post<{ uid: number }>('/user', data)
 export const loginUser = (data: { name: string; password: string }) =>
-  adminApi.post<{ uid: number; token: string }>('/user/login', data)
+  adminApi.post<{ uid: number }>('/user/login', data)
 export const updateUserPassword = (uid: number, data: { password: string; new_password: string }) => adminApi.put(`/user/${uid}`, data)
 export const deleteUser = (uid: number, data: { password: string }) => adminApi.delete(`/user/${uid}`, { data })
 

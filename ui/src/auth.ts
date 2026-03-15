@@ -2,7 +2,6 @@ import { computed, ref } from 'vue'
 
 export interface SessionInfo {
   uid: number
-  token: string
   name: string
 }
 
@@ -15,7 +14,7 @@ const parseSession = (raw: string | null): SessionInfo | null => {
   if (!raw) return null
   try {
     const parsed = JSON.parse(raw) as SessionInfo
-    if (!parsed || !Number.isInteger(parsed.uid) || parsed.uid <= 0 || !parsed.token || !parsed.name) return null
+    if (!parsed || !Number.isInteger(parsed.uid) || parsed.uid <= 0 || !parsed.name) return null
     return parsed
   } catch {
     return null

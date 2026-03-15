@@ -213,10 +213,10 @@ func userCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	setSessionCookies(w, r, uid, token)
 	utils.HttpReplyJsonWithLog(ctx.ContextLogger, w, http.StatusOK, &struct {
-		Uid   uint32 `json:"uid"`
-		Token string `json:"token"`
-	}{Uid: uid, Token: token})
+		Uid uint32 `json:"uid"`
+	}{Uid: uid})
 }
 
 func userLogin(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
@@ -264,10 +264,10 @@ func userLogin(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	setSessionCookies(w, r, uid, token)
 	utils.HttpReplyJsonWithLog(ctx.ContextLogger, w, http.StatusOK, &struct {
-		Uid   uint32 `json:"uid"`
-		Token string `json:"token"`
-	}{Uid: uid, Token: token})
+		Uid uint32 `json:"uid"`
+	}{Uid: uid})
 }
 
 func userUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {

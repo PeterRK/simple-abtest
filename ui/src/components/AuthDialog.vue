@@ -43,7 +43,7 @@ const submit = async () => {
   try {
     const req = { name: form.value.name.trim(), password: form.value.password }
     const res = mode.value === 'login' ? await loginUser(req) : await registerUser(req)
-    saveSession({ uid: res.data.uid, token: res.data.token, name: req.name })
+    saveSession({ uid: res.data.uid, name: req.name })
     ElMessage.success(mode.value === 'login' ? t('message.loginSuccess') : t('message.registerSuccess'))
     await router.replace({ name: 'ExperimentList' })
     resetForm()
