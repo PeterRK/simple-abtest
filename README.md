@@ -43,9 +43,9 @@
 
 ## 服务组成
 
-- `admin`：管理后台 API，负责应用、实验、流量、配置、权限管理。
+- `admin`：管理后台发布站，提供管理 API、`/ui/...` 静态资源和 `/engine` 代理。
 - `engine`：在线分流服务，周期性从 MySQL 拉取配置并构建内存模型。
-- `ui`：Web 管理台，操作实验配置并提供在线验证界面。
+- `ui`：Web 管理台前端工程，构建产物由 `admin` 以 `/ui/...` 路径发布。
 - `sdk-go`、`sdk-java`、`sdk-cpp`：本地判定 SDK，拉取快照后在进程内执行分流。
 
 ## 流量模型说明
@@ -223,7 +223,7 @@ go run ./admin -config admin/config.yaml -port 8001
 go run ./engine -config engine/config.yaml -port 8080
 ```
 
-### 启动前端
+### 前端开发模式
 
 ```bash
 cd ui
@@ -234,7 +234,37 @@ npm run dev
 默认开发代理见 [ui/vite.config.ts](/d:/GoSpace/projects/src/github.com/peterrk/simple-abtest/ui/vite.config.ts)：
 
 - `/api/* -> http://localhost:8001`
-- `/engine/* -> http://localhost:8080`
+- `/engine/* -> http://localhost:8001`
+
+此时访问 Vite 开发服务器即可，前端会经由 `admin` 代理调用 `engine`，不会直接跨站访问 `engine`。
+
+### 前端生产部署
+
+先构建 UI：
+
+```bash
+cd ui
+npm install
+npm run build
+```
+
+生产部署时建议显式指定 UI 产物目录和 engine 地址：
+
+```bash
+go run ./admin -config admin/config.yaml -port 8001 \
+  -ui-resource ./ui/dist \
+  -engine http://127.0.0.1:8080
+go run ./engine -config engine/config.yaml -port 8080
+```
+
+发布后的访问方式：
+
+- 管理端 API：`/api/...`
+- UI：`/ui/`
+- UI 静态资源：`/ui/assets/...`
+- UI 调用的在线校验接口：`/engine`
+
+也就是说，最终对外只需要暴露 `admin`；前端不再直接访问 `engine`，跨站问题由 `admin` 侧代理统一解决。
 
 ## 文档索引
 

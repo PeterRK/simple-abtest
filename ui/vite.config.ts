@@ -8,6 +8,7 @@ import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  base: '/ui/',
   plugins: [
     vue(),
     AutoImport({
@@ -41,9 +42,8 @@ export default defineConfig({
         changeOrigin: true
       },
       '/engine': {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/engine/, '')
+        target: 'http://localhost:8001',
+        changeOrigin: true
       }
     }
   }

@@ -199,7 +199,7 @@ const messages: Record<Locale, MessageTree> = {
       sharePercent: '流量百分比'
     },
     group: {
-      rebalance: '扩缩容',
+      rebalance: '调整流量',
       createGroup: '新增 Group',
       shuffle: '流量打散',
       groupName: '组名',

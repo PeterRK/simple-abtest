@@ -30,6 +30,8 @@ func Main() int {
 	flag.UintVar(&port, "port", 8001, "service port")
 	flag.StringVar(&cfgPath, "config", "config.yaml", "config file")
 	flag.StringVar(&logPath, "log", "", "log file path")
+	flag.StringVar(&uiResourceDir, "ui-resource", "ui", "ui resource dir")
+	flag.StringVar(&engineUrl, "engine", "http://127.0.0.1:8080", "engine url")
 	flag.Parse()
 
 	config := struct {
@@ -114,6 +116,10 @@ func Main() int {
 	bindSegOp(router, registry)
 	bindGrpOp(router, registry)
 	bindUserOp(router, registry)
+	if err := bindSiteOp(router); err != nil {
+		fmt.Printf("fail to prepare site routes: %v\n", err)
+		return 1
+	}
 
 	if config.Test {
 		router.HandlerFunc(http.MethodGet, "/debug/pprof/", pprof.Index)
@@ -137,6 +143,9 @@ var (
 
 	sessionPrefix   string
 	privilegePrefix string
+
+	uiResourceDir string
+	engineUrl     string
 )
 
 func prepareSqls() error {
