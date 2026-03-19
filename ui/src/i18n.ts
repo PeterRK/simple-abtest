@@ -79,6 +79,8 @@ const messages: Record<Locale, MessageTree> = {
       registerSuccess: '注册成功',
       userExists: '用户名已存在',
       loginFailed: '用户名或密码错误',
+      inviteCodeRequired: '邀请码不能为空',
+      inviteCodeInvalid: '邀请码错误',
       oldPasswordRequired: '原密码不能为空',
       passwordRequired: '新密码不能为空',
       passwordRule: '密码至少6位，且必须包含字母和数字',
@@ -135,6 +137,7 @@ const messages: Record<Locale, MessageTree> = {
       goRegister: '没有账号？去注册',
       goLogin: '已有账号？去登录',
       password: '密码',
+      inviteCode: '邀请码',
       confirmPassword: '确认密码'
     },
     profile: {
@@ -287,6 +290,8 @@ const messages: Record<Locale, MessageTree> = {
       registerSuccess: 'Registration succeeded',
       userExists: 'Username already exists',
       loginFailed: 'Invalid username or password',
+      inviteCodeRequired: 'Invite code is required',
+      inviteCodeInvalid: 'Invalid invite code',
       oldPasswordRequired: 'Current password is required',
       passwordRequired: 'New password is required',
       passwordRule: 'Password must be at least 6 characters and include letters and numbers',
@@ -343,6 +348,7 @@ const messages: Record<Locale, MessageTree> = {
       goRegister: 'No account? Register',
       goLogin: 'Already have an account? Login',
       password: 'Password',
+      inviteCode: 'Invite Code',
       confirmPassword: 'Confirm Password'
     },
     profile: {

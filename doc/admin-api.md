@@ -66,7 +66,8 @@ Request:
 ```json
 {
   "name": "alice",
-  "password": "secret"
+  "password": "secret",
+  "secret": "invite-code"
 }
 ```
 
@@ -80,6 +81,8 @@ Response `200 OK`:
 
 Notes:
 
+- `secret` is an optional registration invite code / predefined secret.
+- when the server enables a predefined secret, invalid or missing `secret` may return `401 Unauthorized`
 - duplicate name -> `409 Conflict`
 
 ### POST `/api/user/login`

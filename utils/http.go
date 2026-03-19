@@ -124,6 +124,7 @@ func RunHttpServer(router http.Handler, address string) error {
 	go func() {
 		sigs := make(chan os.Signal, 1)
 		signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+		defer signal.Stop(sigs)
 		<-sigs
 		if err := srv.Shutdown(context.Background()); err != nil {
 			fmt.Fprintln(os.Stderr, "!!!", err)

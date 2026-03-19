@@ -10,7 +10,6 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/peterrk/simple-abtest/utils"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 var grpSql struct {
@@ -126,7 +125,7 @@ func prepareGrpSql(db *sql.DB) (err error) {
 	return nil
 }
 
-func bindGrpOp(router *httprouter.Router, registry *prometheus.Registry) {
+func bindGrpOp(router *httprouter.Router) {
 	router.Handle(http.MethodPost, "/api/grp", grpCreate)
 	router.Handle(http.MethodGet, "/api/grp/:id", grpGetOne)
 	router.Handle(http.MethodPut, "/api/grp/:id", grpUpdate)

@@ -7,10 +7,10 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/peterrk/simple-abtest/utils"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 var userSql struct {
@@ -23,8 +23,8 @@ var userSql struct {
 }
 
 var privSql struct {
-	update      *sql.Stmt
-	remove      *sql.Stmt
+	update *sql.Stmt
+	remove *sql.Stmt
 
 	getListByApp *sql.Stmt
 	getListByUid *sql.Stmt
@@ -104,7 +104,7 @@ func prepareUserSql(db *sql.DB) (err error) {
 	return nil
 }
 
-func bindUserOp(router *httprouter.Router, registry *prometheus.Registry) {
+func bindUserOp(router *httprouter.Router) {
 	router.Handle(http.MethodPost, "/api/user", userCreate)
 	router.Handle(http.MethodPost, "/api/user/login", userLogin)
 	router.Handle(http.MethodPut, "/api/user/:id", userUpdate)
@@ -124,11 +124,11 @@ const (
 )
 
 func makeSessionKey(uid uint32) string {
-	return fmt.Sprintf("%s%d", sessionPrefix, uid)
+	return fmt.Sprintf("%ssession-%d", redisPrefix, uid)
 }
 
 func makePrivilegeKey(uid uint32) string {
-	return fmt.Sprintf("%s%d", privilegePrefix, uid)
+	return fmt.Sprintf("%sprivilege-%d", redisPrefix, uid)
 }
 
 // hashPassword intentionally uses sha256(password+salt) for this project.
@@ -176,13 +176,21 @@ func userCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	req := &struct {
 		Name     string `json:"name"`
 		Password string `json:"password"`
+		Secret   string `json:"secret"`
 	}{}
 	if !getJsonArgs(ctx, w, r, req) {
+		return
+	}
+	if len(predefinedSecret) != 0 && req.Secret != predefinedSecret {
+		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 	ctx.Debugf("request name=%q", req.Name)
 	if len(req.Name) == 0 || len(req.Password) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if !requireRateLimit(ctx, w, r, loginRateLimitByIP, getRequestAddr(r)) {
 		return
 	}
 
@@ -233,6 +241,12 @@ func userLogin(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	if !requireRateLimit(ctx, w, r, loginRateLimitByIP, getRequestAddr(r)) {
+		return
+	}
+	if !requireRateLimit(ctx, w, r, loginRateLimitByAccount, req.Name) {
+		return
+	}
 
 	var (
 		uid      uint32
@@ -274,6 +288,12 @@ func userUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	ctx := NewContext(r.Context(), "userUpdate")
 	target, ok := parseUintParam(w, p, "id")
 	if !ok {
+		return
+	}
+	if !requireRateLimit(ctx, w, r, updateRateLimitByIP, getRequestAddr(r)) {
+		return
+	}
+	if !requireRateLimit(ctx, w, r, updateRateLimitByUser, strconv.FormatUint(uint64(target), 10)) {
 		return
 	}
 
@@ -320,6 +340,12 @@ func userDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	if !ok {
 		return
 	}
+	if !requireRateLimit(ctx, w, r, deleteRateLimitByIP, getRequestAddr(r)) {
+		return
+	}
+	if !requireRateLimit(ctx, w, r, deleteRateLimitByUser, strconv.FormatUint(uint64(target), 10)) {
+		return
+	}
 
 	// Design note:
 	// Account deletion follows the same credential-based authorization model as
@@ -352,6 +378,10 @@ func userDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	if n == 0 {
 		w.WriteHeader(http.StatusNotFound)
 		return
+	}
+
+	if err := rds.Del(ctx, makeSessionKey(target)).Err(); err != nil {
+		ctx.Warnf("fail to clear session for deleted user uid=%d: %v", target, err)
 	}
 }
 

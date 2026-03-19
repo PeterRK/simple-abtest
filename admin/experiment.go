@@ -9,7 +9,6 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/peterrk/simple-abtest/engine/core"
 	"github.com/peterrk/simple-abtest/utils"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 var expSql struct {
@@ -91,7 +90,7 @@ type expDetail struct {
 	Filter []core.ExprNode `json:"filter,omitempty"`
 }
 
-func bindExpOp(router *httprouter.Router, registry *prometheus.Registry) {
+func bindExpOp(router *httprouter.Router) {
 	router.Handle(http.MethodPost, "/api/exp", expCreate)
 	router.Handle(http.MethodGet, "/api/exp/:id", expGetOne)
 	router.Handle(http.MethodPut, "/api/exp/:id", expUpdate)

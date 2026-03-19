@@ -27,7 +27,7 @@ adminApi.interceptors.response.use(
 )
 
 // User
-export const registerUser = (data: { name: string; password: string }) =>
+export const registerUser = (data: { name: string; password: string; secret: string }) =>
   adminApi.post<{ uid: number }>('/user', data)
 export const loginUser = (data: { name: string; password: string }) =>
   adminApi.post<{ uid: number }>('/user/login', data)

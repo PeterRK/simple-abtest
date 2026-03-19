@@ -11,7 +11,7 @@ const { authDialogVisible } = useAuth()
 const router = useRouter()
 const mode = ref<'login' | 'register'>('login')
 const loading = ref(false)
-const form = ref({ name: '', password: '', confirmPassword: '' })
+const form = ref({ name: '', password: '', confirmPassword: '', secret: '' })
 const { t, locale, setLocale } = useI18n()
 
 const handleLocaleChange = (nextLocale: string) => {
@@ -19,7 +19,7 @@ const handleLocaleChange = (nextLocale: string) => {
 }
 
 const resetForm = () => {
-  form.value = { name: '', password: '', confirmPassword: '' }
+  form.value = { name: '', password: '', confirmPassword: '', secret: '' }
 }
 
 const submit = async () => {
@@ -42,7 +42,9 @@ const submit = async () => {
   loading.value = true
   try {
     const req = { name: form.value.name.trim(), password: form.value.password }
-    const res = mode.value === 'login' ? await loginUser(req) : await registerUser(req)
+    const res = mode.value === 'login'
+      ? await loginUser(req)
+      : await registerUser({ ...req, secret: form.value.secret.trim() })
     saveSession({ uid: res.data.uid, name: req.name })
     ElMessage.success(mode.value === 'login' ? t('message.loginSuccess') : t('message.registerSuccess'))
     await router.replace({ name: 'ExperimentList' })
@@ -51,6 +53,10 @@ const submit = async () => {
     const status = e?.response?.status
     if (mode.value === 'register' && status === 409) {
       ElMessage.error(t('message.userExists'))
+      return
+    }
+    if (mode.value === 'register' && status === 401) {
+      ElMessage.error(t('message.inviteCodeInvalid'))
       return
     }
     if (mode.value === 'login' && status === 401) {
@@ -99,6 +105,9 @@ const switchMode = () => {
       </el-form-item>
       <el-form-item v-if="mode === 'register'" :label="t('auth.confirmPassword')">
         <el-input v-model="form.confirmPassword" type="password" show-password autocomplete="new-password" @keyup.enter="submit" />
+      </el-form-item>
+      <el-form-item v-if="mode === 'register'" :label="t('auth.inviteCode')">
+        <el-input v-model="form.secret" autocomplete="one-time-code" @keyup.enter="submit" />
       </el-form-item>
     </el-form>
     <template #footer>

@@ -6,7 +6,6 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/peterrk/simple-abtest/utils"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 var lyrSql struct {
@@ -65,7 +64,7 @@ type lyrDetail struct {
 	Version uint32 `json:"version"`
 }
 
-func bindLyrOp(router *httprouter.Router, registry *prometheus.Registry) {
+func bindLyrOp(router *httprouter.Router) {
 	router.Handle(http.MethodPost, "/api/lyr", lyrCreate)
 	router.Handle(http.MethodGet, "/api/lyr/:id", lyrGetOne)
 	router.Handle(http.MethodPut, "/api/lyr/:id", lyrUpdate)

@@ -6,7 +6,6 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/peterrk/simple-abtest/utils"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 var appSql struct {
@@ -58,7 +57,7 @@ func prepareAppSql(db *sql.DB) (err error) {
 	return nil
 }
 
-func bindAppOp(router *httprouter.Router, registry *prometheus.Registry) {
+func bindAppOp(router *httprouter.Router) {
 	router.Handle(http.MethodPost, "/api/app", appCreate)
 	router.Handle(http.MethodGet, "/api/app", appGetList)
 	router.Handle(http.MethodGet, "/api/app/:id", appGetOne)

@@ -19,13 +19,13 @@ func bindSiteOp(router *httprouter.Router) error {
 		return err
 	}
 
-	router.Handler(http.MethodPost, "/engine", newEngineProxy(engine))
+	router.Handle(http.MethodPost, "/engine", newEngineProxy(engine))
 	router.Handle(http.MethodGet, "/ui/*filepath", handleUi)
 	router.Handle(http.MethodHead, "/ui/*filepath", handleUi)
 	return nil
 }
 
-func newEngineProxy(target *url.URL) http.Handler {
+func newEngineProxy(target *url.URL) httprouter.Handle {
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	originDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
@@ -36,7 +36,13 @@ func newEngineProxy(target *url.URL) http.Handler {
 	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, _ error) {
 		w.WriteHeader(http.StatusBadGateway)
 	}
-	return proxy
+	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+		ctx := NewContext(r.Context(), "engineProxy")
+		if _, ok := verifySession(ctx, w, r); !ok {
+			return
+		}
+		proxy.ServeHTTP(w, r)
+	}
 }
 
 func joinUrlPath(basePath, subPath string) string {

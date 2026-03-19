@@ -7,7 +7,6 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/peterrk/simple-abtest/utils"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 var segSql struct {
@@ -71,7 +70,7 @@ func prepareSegSql(db *sql.DB) (err error) {
 	return nil
 }
 
-func bindSegOp(router *httprouter.Router, registry *prometheus.Registry) {
+func bindSegOp(router *httprouter.Router) {
 	router.Handle(http.MethodPost, "/api/seg", segCreate)
 	router.Handle(http.MethodGet, "/api/seg/:id", segGetOne)
 	router.Handle(http.MethodDelete, "/api/seg/:id", segDelete)

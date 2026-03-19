@@ -12,8 +12,6 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/julienschmidt/httprouter"
 	"github.com/peterrk/simple-abtest/utils"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -32,6 +30,7 @@ func Main() int {
 	flag.StringVar(&logPath, "log", "", "log file path")
 	flag.StringVar(&uiResourceDir, "ui-resource", "ui", "ui resource dir")
 	flag.StringVar(&engineUrl, "engine", "http://127.0.0.1:8080", "engine url")
+	flag.StringVar(&predefinedSecret, "secret", "", "predefined secret")
 	flag.Parse()
 
 	config := struct {
@@ -39,11 +38,10 @@ func Main() int {
 			MaxBackups int `yaml:"max_backups"`
 			MaxDays    int `yaml:"max_days"`
 		} `yaml:"log"`
-		Test            bool              `yaml:"test"`
-		Database        string            `yaml:"db"`
-		Redis           utils.RedisConfig `yaml:"redis"`
-		SessionPrefix   string            `yaml:"session_prefix"`
-		PrivilegePrefix string            `yaml:"privilege_prefix"`
+		Test        bool              `yaml:"test"`
+		Database    string            `yaml:"db"`
+		Redis       utils.RedisConfig `yaml:"redis"`
+		RedisPrefix string            `yaml:"redis_prefix"`
 	}{}
 
 	err := utils.LoadYamlFile(cfgPath, &config)
@@ -60,12 +58,7 @@ func Main() int {
 		fmt.Println("database is unspecified")
 		return 1
 	}
-	if len(config.SessionPrefix) == 0 || len(config.PrivilegePrefix) == 0 {
-		fmt.Println("session prefix or privilege prefix is unspecified")
-		return 1
-	}
-	sessionPrefix = config.SessionPrefix
-	privilegePrefix = config.PrivilegePrefix
+	redisPrefix = config.RedisPrefix
 
 	rds, err = utils.NewRedisClientWithCheck(&config.Redis)
 	if err != nil {
@@ -101,21 +94,16 @@ func Main() int {
 	}
 	defer utils.SyncLog()
 
-	registry := prometheus.NewRegistry()
-
 	router := httprouter.New()
-	router.Handler(http.MethodGet, "/metrics",
-		promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
-	router.HandlerFunc(http.MethodPut, "/loglevel", utils.HttpChangeLogLevel)
 	router.HandlerFunc(http.MethodGet, "/health",
 		func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("OK")) })
 
-	bindAppOp(router, registry)
-	bindExpOp(router, registry)
-	bindLyrOp(router, registry)
-	bindSegOp(router, registry)
-	bindGrpOp(router, registry)
-	bindUserOp(router, registry)
+	bindAppOp(router)
+	bindExpOp(router)
+	bindLyrOp(router)
+	bindSegOp(router)
+	bindGrpOp(router)
+	bindUserOp(router)
 	if err := bindSiteOp(router); err != nil {
 		fmt.Printf("fail to prepare site routes: %v\n", err)
 		return 1
@@ -141,11 +129,12 @@ var (
 	db  *sql.DB
 	rds *redis.Client
 
-	sessionPrefix   string
-	privilegePrefix string
+	redisPrefix string
 
 	uiResourceDir string
 	engineUrl     string
+
+	predefinedSecret string
 )
 
 func prepareSqls() error {
