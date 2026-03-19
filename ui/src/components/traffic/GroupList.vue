@@ -30,6 +30,7 @@
         />
         <el-button type="primary" :disabled="!isGroupDirty" @click="handleUpdate">{{ t('common.update') }}</el-button>
         <div class="group-detail-actions">
+          <el-button @click="handleFormatInput">{{ t('group.formatInput') }}</el-button>
           <el-button @click="handleSearchConfigs">{{ t('group.searchConfig') }}</el-button>
           <div class="config-days-input">
             <el-input-number v-model="configDays" :min="0" :max="3650" size="small" />
@@ -40,6 +41,7 @@
       <div class="group-config-area">
         <el-input
           v-model="forceHitText"
+          class="force-hit-panel"
           type="textarea"
           :rows="8"
           :placeholder="t('group.forceHitPlaceholder')"
@@ -47,6 +49,7 @@
         />
         <el-input
           v-model="newConfigContent"
+          class="config-editor-panel"
           type="textarea"
           :rows="8"
           :placeholder="t('group.configPlaceholder')"
@@ -63,8 +66,8 @@
             :row-class-name="configRowClassName"
             @current-change="handleSelectConfig"
           >
-            <el-table-column prop="id" :label="t('group.configId')" width="120" />
-            <el-table-column prop="stamp" :label="t('group.updateTime')" />
+            <el-table-column prop="id" :label="t('group.configId')" width="72" />
+            <el-table-column prop="stamp" :label="t('group.updateTime')" min-width="144" />
           </el-table>
         </div>
       </div>
@@ -499,6 +502,19 @@ const handleSearchConfigs = async () => {
   await loadConfigs(selectedGroupDetail.value.id, begin)
 }
 
+const handleFormatInput = async () => {
+  const raw = newConfigContent.value.trim()
+  if (!raw) return
+  try {
+    const parsed = JSON.parse(raw)
+    newConfigContent.value = JSON.stringify(parsed, null, 2)
+  } catch (e) {
+    await ElMessageBox.alert(t('message.invalidJsonFormat'), t('common.warning'), {
+      type: 'warning'
+    })
+  }
+}
+
 const normalizeConfigContent = (content: unknown) => {
   if (typeof content === 'string') return content
   try {
@@ -612,6 +628,13 @@ const configRowClassName = ({ row }: { row: Config }) => {
   gap: 12px;
   align-items: flex-start;
 }
+.force-hit-panel {
+  flex: 0 0 220px;
+}
+.config-editor-panel {
+  flex: 1 1 0;
+  min-width: 420px;
+}
 .group-config-area :deep(.el-textarea__inner) {
   min-height: 220px;
 }
@@ -619,8 +642,8 @@ const configRowClassName = ({ row }: { row: Config }) => {
   color: #e6a23c;
 }
 .config-history {
-  min-width: 260px;
-  flex: 0 0 320px;
+  min-width: 220px;
+  flex: 0 0 220px;
 }
 .config-history :deep(.el-table) {
   width: 100%;
@@ -636,5 +659,18 @@ const configRowClassName = ({ row }: { row: Config }) => {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+@media (max-width: 720px) {
+  .group-config-area {
+    flex-wrap: wrap;
+  }
+
+  .force-hit-panel,
+  .config-editor-panel,
+  .config-history {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
 }
 </style>

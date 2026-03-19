@@ -95,7 +95,8 @@ const messages: Record<Locale, MessageTree> = {
       invalidCompareArgs: '比较算子参数不合法',
       missingTargetGroup: '未找到目标组或默认组，请刷新后重试',
       invalidShareRange: '流量不合法，仅可在 {min} ~ {max} 范围内调整',
-      sumShareMust100: '流量百分比总和需为 100'
+      sumShareMust100: '流量百分比总和需为 100',
+      invalidJsonFormat: '输入内容不是合法 JSON，无法格式化'
     },
     confirm: {
       deleteApp: '确定删除该应用？',
@@ -203,6 +204,7 @@ const messages: Record<Locale, MessageTree> = {
       createGroup: '新增 Group',
       shuffle: '流量打散',
       groupName: '组名',
+      formatInput: '格式化输入',
       searchConfig: '配置查找',
       dayAgo: '天前',
       forceHitPlaceholder: '强制命中 key，每行一个',
@@ -301,7 +303,8 @@ const messages: Record<Locale, MessageTree> = {
       invalidCompareArgs: 'Invalid compare operator arguments',
       missingTargetGroup: 'Target group or default group not found, please refresh',
       invalidShareRange: 'Invalid share. Allowed range: {min} ~ {max}',
-      sumShareMust100: 'The total share percentage must be 100'
+      sumShareMust100: 'The total share percentage must be 100',
+      invalidJsonFormat: 'The input is not valid JSON and cannot be formatted'
     },
     confirm: {
       deleteApp: 'Delete this app?',
@@ -409,6 +412,7 @@ const messages: Record<Locale, MessageTree> = {
       createGroup: 'New Group',
       shuffle: 'Shuffle',
       groupName: 'Group name',
+      formatInput: 'Format Input',
       searchConfig: 'Find Config',
       dayAgo: 'days ago',
       forceHitPlaceholder: 'Force-hit keys, one per line',
