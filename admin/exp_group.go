@@ -108,7 +108,7 @@ func prepareGrpSql(db *sql.DB) (err error) {
 
 	cfgSql.getList, err = db.Prepare(
 		"SELECT `cfg_id`,`stamp` FROM `exp_config` " +
-			"WHERE `grp_id`=? AND stamp>=? ORDER BY `cfg_id` ASC")
+			"WHERE `grp_id`=? AND stamp>=? ORDER BY `cfg_id` DESC LIMIT 50")
 	if err != nil {
 		return err
 	}

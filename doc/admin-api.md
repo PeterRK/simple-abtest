@@ -742,6 +742,11 @@ Response `200 OK`:
 ]
 ```
 
+Notes:
+
+- Returns at most **50** records, ordered by `id` descending (newest first).
+- Use `begin` to filter by creation time; records with `stamp < begin` are excluded.
+
 ### POST `/api/grp/:id/cfg`
 
 Create config record; request body is raw content.
