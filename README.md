@@ -138,8 +138,7 @@ redis:
   password: ""
   pool_size: 10
   idle_size: 2
-session_prefix: "session-"
-privilege_prefix: "privilege-"
+redis_prefix: "sab-"
 test: false
 ```
 
@@ -147,7 +146,7 @@ test: false
 
 - `db`：MySQL 连接串，`admin` 和 `engine` 都会使用。
 - `redis.address`：Redis 地址，管理端用于会话和权限缓存。
-- `session_prefix`、`privilege_prefix`：建议为当前环境设置独立前缀，避免和其他环境混用。
+- `redis_prefix`：建议为当前环境设置独立前缀，避免和其他环境混用。
 - `test`：设为 `true` 时会打开更详细的调试能力，不建议生产环境开启。
 
 `engine/config.yaml`
