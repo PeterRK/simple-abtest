@@ -34,8 +34,8 @@ type grpSummary struct {
 	Id        uint32 `json:"id"`
 	Share     uint32 `json:"share"`
 	Name      string `json:"name"`
-	IsDefault bool   `json:"is_default,omitempty"`
-	Version   uint32 `json:"version,omitempty"`
+	IsDefault bool   `json:"is_default"`
+	Version   uint32 `json:"version"`
 }
 
 type grpDetail struct {

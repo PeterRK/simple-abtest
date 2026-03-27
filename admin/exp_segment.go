@@ -23,7 +23,7 @@ type segSummary struct {
 	Id      uint32 `json:"id"`
 	Begin   uint32 `json:"begin"`
 	End     uint32 `json:"end"`
-	Version uint32 `json:"version,omitempty"`
+	Version uint32 `json:"version"`
 }
 
 func prepareSegSql(db *sql.DB) (err error) {
