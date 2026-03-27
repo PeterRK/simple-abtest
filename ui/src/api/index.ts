@@ -5,7 +5,10 @@ import { clearSession } from '@/auth'
 
 const adminApi = axios.create({
   baseURL: '/api',
-  withCredentials: true
+  withCredentials: true,
+  headers: {
+    'X-Requested-With': 'XMLHttpRequest'
+  }
 })
 
 const engineApi = axios.create({

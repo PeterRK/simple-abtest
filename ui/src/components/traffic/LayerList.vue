@@ -338,8 +338,7 @@ watch(
     for (const layerId of val) {
       fetchLayerDetail(layerId)
     }
-  },
-  { deep: true }
+  }
 )
 </script>
 

@@ -64,7 +64,11 @@ const handleVerify = async () => {
     }, app.access_token)
     result.value = res.data
   } catch (e) {
-    ElMessage.error(t('message.verifyFailed'))
+    if (e instanceof SyntaxError) {
+      ElMessage.error(t('message.verifyContextInvalidJson'))
+    } else {
+      ElMessage.error(t('message.verifyFailed'))
+    }
   }
 }
 </script>
@@ -99,6 +103,9 @@ const handleVerify = async () => {
       <pre>{{ JSON.stringify(result, null, 2) }}</pre>
     </div>
 
+    <!-- Access Token 明文展示属于设计决策：该 token 用于外部只读场景
+         （SDK/curl 调用引擎接口时需要直接提供），不用于 admin 会话鉴权，
+         此处仅供授权用户查阅以便接入调试，风险等同于 API Key 展示页。 -->
     <el-dialog v-model="tokenDialogVisible" :title="t('common.accessToken')" width="420px">
       <div class="token-dialog-content">
         <div class="token-value">{{ getSelectedApp()?.access_token || '' }}</div>

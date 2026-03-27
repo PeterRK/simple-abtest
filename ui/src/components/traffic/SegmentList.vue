@@ -209,9 +209,11 @@ const handleSegmentUpdate = (nextSegment: Segment) => {
   flex-direction: column;
   gap: 6px;
   cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s;
 }
 .segment-card.active {
   border-color: #409eff;
+  background-color: #ecf5ff;
   box-shadow: 0 0 0 1px #409eff inset;
 }
 .segment-main {

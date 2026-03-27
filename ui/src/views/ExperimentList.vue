@@ -25,6 +25,7 @@ const currentApp = ref<Application | null>(null)
 const expDialogVisible = ref(false)
 const expForm = ref({ name: '', description: '' })
 const experimentStatusMap = ref(new Map<number, number>())
+const switchInFlight = ref(new Set<number>())
 const { t } = useI18n()
 const { isLoggedIn } = useAuth()
 const { getRecentAppId, setRecentAppId } = useRecentApp()
@@ -312,6 +313,11 @@ const handleSwitchChange = async (val: number | boolean | string, row: Experimen
   const newStatus = val ? 1 : 0
   const previousStatus = experimentStatusMap.value.get(row.id)
   if (previousStatus === newStatus) return
+  if (switchInFlight.value.has(row.id)) {
+    row.status = previousStatus ?? row.status
+    return
+  }
+  switchInFlight.value.add(row.id)
   try {
     await switchExp(row.id, { status: newStatus, version: row.version })
     ElMessage.success(t('message.statusUpdated'))
@@ -320,6 +326,8 @@ const handleSwitchChange = async (val: number | boolean | string, row: Experimen
   } catch (e) {
     ElMessage.error(t('message.updateFailedRefresh'))
     row.status = row.status === 1 ? 0 : 1
+  } finally {
+    switchInFlight.value.delete(row.id)
   }
 }
 

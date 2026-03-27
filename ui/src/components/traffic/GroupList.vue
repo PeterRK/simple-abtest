@@ -124,8 +124,17 @@ const selectedConfigContent = ref('')
 const configHistory = ref<Config[]>([])
 const selectedConfigId = ref<number | null>(null)
 const configDays = ref(7)
+const MAX_CONFIG_CACHE_SIZE = 20
 const configContentCache = new Map<number, string>()
 const configLoadInFlight = new Map<number, Promise<string>>()
+
+const setConfigCache = (id: number, content: string) => {
+  if (configContentCache.size >= MAX_CONFIG_CACHE_SIZE) {
+    const oldest = configContentCache.keys().next().value
+    if (oldest !== undefined) configContentCache.delete(oldest)
+  }
+  configContentCache.set(id, content)
+}
 const { t } = useI18n()
 const isCancelAction = (error: unknown) => error === 'cancel' || error === 'close'
 
@@ -202,7 +211,7 @@ const loadGroupDetail = async (grpId: number) => {
     configContentCache.clear()
     configLoadInFlight.clear()
     if (res.data.cfg_id != null && res.data.cfg_id > 0) {
-      configContentCache.set(res.data.cfg_id, res.data.config || '')
+      setConfigCache(res.data.cfg_id, res.data.config || '')
     }
   } catch (e) {
     selectedGroupDetail.value = null
@@ -350,7 +359,7 @@ const handleUpdate = async () => {
     selectedGroupDetail.value = nextGroupDetail
     selectedConfigContent.value = nextConfigContent
     selectedConfigId.value = nextConfigId
-    configContentCache.set(nextConfigId, nextConfigContent)
+    setConfigCache(nextConfigId, nextConfigContent)
     if (createdConfigId != null) {
       configHistory.value = [{ id: createdConfigId, stamp: createdConfigStamp }]
     }
@@ -543,7 +552,7 @@ const handleSelectConfig = async (cfg: Config | null) => {
   }
   try {
     const content = await pending
-    configContentCache.set(cfgId, content)
+    setConfigCache(cfgId, content)
     if (selectedConfigId.value === cfgId) {
       selectedConfigContent.value = content
       newConfigContent.value = content
@@ -581,9 +590,11 @@ const configRowClassName = ({ row }: { row: Config }) => {
   align-items: center;
   justify-content: center;
   text-align: center;
+  transition: border-color 0.15s, background-color 0.15s;
 }
 .group-card.active {
   border-color: #409eff;
+  background-color: #ecf5ff;
   box-shadow: 0 0 0 1px #409eff inset;
 }
 .group-title {
