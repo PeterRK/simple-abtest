@@ -129,9 +129,6 @@ mysql -uroot -p abtest < db/engine.sql
 `admin/config.yaml`
 
 ```yaml
-log:
-  max_backups: 7
-  max_days: 7
 db: "abtest:abtest@tcp(127.0.0.1:3306)/abtest?parseTime=true&charset=utf8mb4"
 redis:
   address: "127.0.0.1:6379"
