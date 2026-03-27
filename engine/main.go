@@ -16,6 +16,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/peterrk/simple-abtest/engine/core"
 	"github.com/peterrk/simple-abtest/engine/data"
+	"github.com/peterrk/simple-abtest/engine/sign"
 	"github.com/peterrk/simple-abtest/utils"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -195,7 +196,7 @@ func abtest(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	if app.AccessToken != r.Header.Get("ACCESS_TOKEN") {
+	if !sign.VerifyPublicToken(app.AccessToken, req.AppId, r.Header.Get("ACCESS_TOKEN")) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -221,7 +222,7 @@ func fetchAppInfo(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	if app.AccessToken != r.Header.Get("ACCESS_TOKEN") {
+	if !sign.VerifyPublicToken(app.AccessToken, uint32(id), r.Header.Get("ACCESS_TOKEN")) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}

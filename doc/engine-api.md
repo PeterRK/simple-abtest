@@ -6,7 +6,7 @@ Main A/B testing decision API.
 
 Required header:
 
-- `ACCESS_TOKEN`: application access token returned by admin APIs
+- `ACCESS_TOKEN`: short-lived public token signed from one application's stored secret
 
 **Request**
 
@@ -43,13 +43,18 @@ Required header:
 - `401`: missing or invalid `ACCESS_TOKEN`.
 - `404`: `appid` does not exist in engine memory.
 
+Notes:
+
+- current token format is `base64url(appid:uint32 | expire_ts:uint32 | hmac_sha256(payload)[:16])`.
+- `expire_ts` uses unix seconds and is checked by engine during verification.
+
 ### GET `/app/:id`
 
 Get the whole experiment payload for one application.
 
 Required header:
 
-- `ACCESS_TOKEN`: application access token returned by admin APIs
+- `ACCESS_TOKEN`: short-lived public token signed from one application's stored secret
 
 **Path Params**
 

@@ -30,7 +30,7 @@ application
 
 - `app_id`：应用 ID。
 - `name`、`description`：应用名称和描述。
-- `access_token`：调用 `engine` 时使用的访问令牌。
+- `access_token`：应用级长期密钥。它由服务端用于签发/校验短期公开 token，本身不再通过普通应用查询接口返回。
 - `version`：乐观锁版本号。
 
 说明：

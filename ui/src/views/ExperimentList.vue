@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue'
-import { getApps, createApp, updateApp, deleteApp, getApp, createExp, switchExp } from '@/api'
+import { getApps, createApp, updateApp, deleteApp, getApp, createExp, switchExp, issueAppToken } from '@/api'
 import type { Application, Experiment } from '@/types'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
@@ -34,11 +34,16 @@ const normalizeText = (text?: string) => text || ''
 type AppSnapshot = {
   id: number
   name: string
-  access_token?: string
   version: number
   description?: string
   experiment: Experiment[]
 }
+
+const tokenDialogVisible = ref(false)
+const tokenForm = ref({ ttlDays: 1 })
+const tokenLoading = ref(false)
+const issuedToken = ref('')
+const issuedTokenExpireAt = ref('')
 
 const isAppNameDirty = computed(() => {
   if (appDialogMode.value !== 'detail' || !currentApp.value) return false
@@ -63,7 +68,6 @@ const applyAppSnapshot = (snapshot: AppSnapshot) => {
   currentApp.value = {
     id: snapshot.id,
     name: snapshot.name,
-    access_token: snapshot.access_token,
     version: snapshot.version,
     description: snapshot.description,
     experiment: nextExperiments.map(exp => ({ ...exp }))
@@ -73,7 +77,6 @@ const applyAppSnapshot = (snapshot: AppSnapshot) => {
     const app = apps.value[index]
     if (app) {
       app.name = snapshot.name
-      app.access_token = snapshot.access_token
       app.version = snapshot.version
       app.description = snapshot.description
       app.experiment = nextExperiments.map(exp => ({ ...exp }))
@@ -148,7 +151,6 @@ const loadExperiments = async () => {
     currentApp.value = {
       id: res.data.id,
       name: res.data.name,
-      access_token: res.data.access_token,
       version: res.data.version,
       description: res.data.description,
       experiment: res.data.experiment
@@ -158,7 +160,6 @@ const loadExperiments = async () => {
     const app = index !== -1 ? apps.value[index] : undefined
     if (app) {
       app.name = res.data.name
-      app.access_token = res.data.access_token
       app.description = res.data.description
       app.version = res.data.version
       app.experiment = res.data.experiment
@@ -197,6 +198,35 @@ const showAppDetail = () => {
   appDialogVisible.value = true
 }
 
+const showTokenDialog = () => {
+  if (!currentApp.value) return
+  issuedToken.value = ''
+  issuedTokenExpireAt.value = ''
+  tokenForm.value.ttlDays = 1
+  tokenDialogVisible.value = true
+}
+
+const handleIssueToken = async () => {
+  if (!currentApp.value) return
+  if (!Number.isFinite(tokenForm.value.ttlDays) || tokenForm.value.ttlDays <= 0) {
+    ElMessage.error(t('message.invalidTokenTTL'))
+    return
+  }
+  tokenLoading.value = true
+  try {
+    const res = await issueAppToken(currentApp.value.id, {
+      ttl_seconds: Math.floor(tokenForm.value.ttlDays * 24 * 60 * 60)
+    })
+    issuedToken.value = res.data.token
+    issuedTokenExpireAt.value = res.data.expire_at
+    ElMessage.success(t('message.tokenIssued'))
+  } catch (e) {
+    ElMessage.error(t('message.issueTokenFailed'))
+  } finally {
+    tokenLoading.value = false
+  }
+}
+
 const handleCreateApp = async () => {
   try {
     const res = await createApp(appForm.value)
@@ -205,7 +235,6 @@ const handleCreateApp = async () => {
     currentApp.value = {
       id: created.id,
       name: created.name,
-      access_token: created.access_token,
       version: created.version,
       description: created.description,
       experiment: created.experiment
@@ -443,6 +472,7 @@ watch(
           <div class="app-detail-footer">
             <el-button type="danger" @click="handleDeleteAppInDialog">{{ t('common.delete') }}</el-button>
             <div class="app-detail-footer-right">
+              <el-button @click="showTokenDialog">{{ t('list.issueAccessToken') }}</el-button>
               <el-button @click="appDialogVisible = false">{{ t('common.cancel') }}</el-button>
               <el-button type="primary" :disabled="!isAppDirty" @click="handleUpdateApp">{{ t('common.update') }}</el-button>
             </div>
@@ -468,6 +498,26 @@ watch(
       <template #footer>
         <el-button @click="expDialogVisible = false">{{ t('common.cancel') }}</el-button>
         <el-button type="primary" @click="handleExpSubmit">{{ t('common.confirm') }}</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="tokenDialogVisible" :title="t('list.issueAccessToken')" width="400px">
+      <el-form :model="tokenForm" label-width="110px">
+        <el-form-item :label="t('token.ttlDays')">
+          <el-input-number v-model="tokenForm.ttlDays" :min="1" :step="1" />
+        </el-form-item>
+        <el-form-item :label="t('common.accessToken')">
+          <div class="token-result">
+            <div class="token-value">{{ issuedToken || '-' }}</div>
+          </div>
+        </el-form-item>
+        <el-form-item :label="t('token.expireAt')">
+          <span>{{ issuedTokenExpireAt || '-' }}</span>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="tokenDialogVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="tokenLoading" @click="handleIssueToken">{{ t('token.issue') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -506,6 +556,15 @@ watch(
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.token-result {
+  width: 100%;
+}
+.token-value {
+  font-family: monospace;
+  line-height: 1.6;
+  word-break: break-all;
+  color: #c45656;
 }
 :deep(.clickable-row) {
     cursor: pointer;

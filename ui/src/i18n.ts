@@ -72,6 +72,9 @@ const messages: Record<Locale, MessageTree> = {
       appVersionMissing: '应用版本缺失',
       appInfoMissing: '无法获取应用信息',
       appTokenMissing: '应用 Access Token 缺失，请刷新后重试',
+      invalidTokenTTL: 'Access Token 有效期必须大于 0',
+      tokenIssued: 'Access Token 已生成',
+      issueTokenFailed: '申请 Access Token 失败',
       verifyRequired: 'App ID 和 Key 为必填项',
       verifyFailed: '验证失败',
       verifyContextInvalidJson: '上下文不是合法 JSON',
@@ -116,7 +119,13 @@ const messages: Record<Locale, MessageTree> = {
       createExperiment: '新增实验',
       appCreateTitle: '新增应用',
       appDetailTitle: '应用详情',
+      issueAccessToken: '申请 Access Token',
       experimentCreateTitle: '新增实验'
+    },
+    token: {
+      ttlDays: '有效期天数',
+      expireAt: '过期时间',
+      issue: '申请'
     },
     detail: {
       expName: '实验名',
@@ -285,6 +294,9 @@ const messages: Record<Locale, MessageTree> = {
       appVersionMissing: 'App version is missing',
       appInfoMissing: 'Unable to resolve app info',
       appTokenMissing: 'App access token is missing. Refresh and retry',
+      invalidTokenTTL: 'Access token TTL must be greater than 0',
+      tokenIssued: 'Access token issued',
+      issueTokenFailed: 'Failed to issue access token',
       verifyRequired: 'App ID and Key are required',
       verifyFailed: 'Verification failed',
       verifyContextInvalidJson: 'Context is not valid JSON',
@@ -329,7 +341,13 @@ const messages: Record<Locale, MessageTree> = {
       createExperiment: 'New Experiment',
       appCreateTitle: 'New App',
       appDetailTitle: 'App Detail',
+      issueAccessToken: 'Issue Access Token',
       experimentCreateTitle: 'New Experiment'
+    },
+    token: {
+      ttlDays: 'TTL Days',
+      expireAt: 'Expires At',
+      issue: 'Issue'
     },
     detail: {
       expName: 'Experiment Name',

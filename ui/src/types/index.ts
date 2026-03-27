@@ -1,7 +1,6 @@
 export interface Application {
   id: number
   name: string
-  access_token?: string
   version?: number
   description?: string
   experiment?: Experiment[]

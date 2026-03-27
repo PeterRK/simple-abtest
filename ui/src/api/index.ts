@@ -43,6 +43,8 @@ export const getApp = (id: number) => adminApi.get<Application>(`/app/${id}`)
 export const createApp = (data: { name: string; description?: string }) => adminApi.post<Application>('/app', data)
 export const updateApp = (id: number, data: { name: string; description?: string; version: number }) => adminApi.put<Application>(`/app/${id}`, data)
 export const deleteApp = (id: number, data: { version: number }) => adminApi.delete(`/app/${id}`, { data })
+export const issueAppToken = (id: number, data: { ttl_seconds: number }) =>
+  adminApi.post<{ token: string; expire_at: string }>(`/app/${id}/token`, data)
 export const getAppPrivileges = (id: number) =>
   adminApi.get<{ name: string; privilege: number; grantor: string }[]>(`/app/${id}/privilege`)
 export const grantAppPrivilege = (id: number, data: { name: string; privilege: number }) =>
@@ -84,9 +86,5 @@ export const getConfig = (grpId: number, cfgId: number) =>
   adminApi.get<string>(`/grp/${grpId}/cfg/${cfgId}`, { responseType: 'text' })
 
 // Engine
-export const verify = (data: { appid: number; key: string; context?: Record<string, string> }, accessToken: string) =>
-  engineApi.post<{ config: Record<string, string>; tags: string[] }>('/', data, {
-    headers: {
-      ACCESS_TOKEN: accessToken
-    }
-  })
+export const verify = (data: { appid: number; key: string; context?: Record<string, string> }) =>
+  engineApi.post<{ config: Record<string, string>; tags: string[] }>('', data)

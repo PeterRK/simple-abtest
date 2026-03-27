@@ -12,7 +12,6 @@ import { useI18n } from '@/i18n'
 type AppSnapshot = {
   id: number
   name: string
-  access_token?: string
   description?: string
   version: number
   experiment: {
@@ -178,7 +177,6 @@ const handleDelete = async () => {
     const appSnapshot: AppSnapshot = {
       id: resolvedApp.id,
       name: resolvedApp.name,
-      access_token: resolvedApp.access_token,
       description: resolvedApp.description,
       version: resolvedApp.version + 1,
       experiment: nextExperiments
