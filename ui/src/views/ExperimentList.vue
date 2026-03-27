@@ -389,11 +389,15 @@ watch(
         </el-select>
         <el-button-group class="ml-2">
             <el-button @click="showCreateApp">{{ t('common.create') }}</el-button>
-            <el-button :disabled="!selectedAppId" @click="showAppDetail">{{ t('common.detail') }}</el-button>
+            <el-tooltip :content="t('list.selectAppFirst')" :disabled="!!selectedAppId" placement="top">
+              <span><el-button :disabled="!selectedAppId" @click="showAppDetail">{{ t('common.detail') }}</el-button></span>
+            </el-tooltip>
         </el-button-group>
       </div>
       <div class="right">
-        <el-button type="primary" :disabled="!selectedAppId" @click="showCreateExp">{{ t('list.createExperiment') }}</el-button>
+        <el-tooltip :content="t('list.selectAppFirst')" :disabled="!!selectedAppId" placement="top">
+          <span><el-button type="primary" :disabled="!selectedAppId" @click="showCreateExp">{{ t('list.createExperiment') }}</el-button></span>
+        </el-tooltip>
       </div>
     </div>
 

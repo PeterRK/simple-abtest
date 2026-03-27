@@ -17,18 +17,18 @@
           <el-option v-for="opt in dtypeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
         </el-select>
 
-        <template v-if="node.op === 4 || node.op === 5">
+        <template v-if="isInOp(node.op)">
            <el-input v-model="ssInput" :placeholder="t('filter.param')" style="width: 180px" @change="updateSS" />
         </template>
         <template v-else>
-           <el-input v-if="node.dtype === 1" v-model="node.s" :placeholder="t('filter.param')" style="width: 180px" @update:model-value="emitChange" />
-           <el-input-number v-else-if="node.dtype === 2" v-model="node.i" :placeholder="t('filter.param')" style="width: 180px" :controls="false" @update:model-value="emitChange" />
-           <el-input-number v-else-if="node.dtype === 3" v-model="node.f" :placeholder="t('filter.param')" style="width: 180px" :controls="false" @update:model-value="emitChange" />
+           <el-input v-if="node.dtype === DataTypes.DtStr" v-model="node.s" :placeholder="t('filter.param')" style="width: 180px" @update:model-value="emitChange" />
+           <el-input-number v-else-if="node.dtype === DataTypes.DtInt" v-model="node.i" :placeholder="t('filter.param')" style="width: 180px" :controls="false" @update:model-value="emitChange" />
+           <el-input-number v-else-if="node.dtype === DataTypes.DtFloat" v-model="node.f" :placeholder="t('filter.param')" style="width: 180px" :controls="false" @update:model-value="emitChange" />
         </template>
       </template>
 
       <el-button size="small" @click="$emit('remove')">{{ t('common.delete') }}</el-button>
-      <el-button v-if="canHaveChildren(node.op)" size="small" @click="addChild" :disabled="node.op === 3 && node.children.length > 0">{{ t('filter.addChild') }}</el-button>
+      <el-button v-if="canHaveChildren(node.op)" size="small" @click="addChild" :disabled="node.op === OpTypes.OpNot && node.children.length > 0">{{ t('filter.addChild') }}</el-button>
     </div>
 
     <div class="children" v-if="node.children && node.children.length > 0">
@@ -46,7 +46,7 @@
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
-import { getOpOptions, getDTypeOptions, type TreeNode } from '@/utils/filter'
+import { getOpOptions, getDTypeOptions, OpTypes, DataTypes, type TreeNode } from '@/utils/filter'
 import { useI18n } from '@/i18n'
 
 const props = defineProps<{
@@ -72,9 +72,9 @@ const updateSS = (val: string) => {
   emitChange()
 }
 
-const isLogicOp = (op: number) => [1, 2, 3].includes(op)
+const isLogicOp = (op: number) => [OpTypes.OpAnd, OpTypes.OpOr, OpTypes.OpNot].includes(op)
 const canHaveChildren = (op: number) => isLogicOp(op)
-const isInOp = (op: number) => [4, 5].includes(op)
+const isInOp = (op: number) => [OpTypes.OpIn, OpTypes.OpNotIn].includes(op)
 const OpOptions = computed(() => getOpOptions(t))
 const dtypeOptions = computed(() => {
   const allTypes = getDTypeOptions(t)
@@ -89,9 +89,9 @@ watch(
   (val) => {
     if (!isLogicOp(val)) {
       if (isInOp(val)) {
-        props.node.dtype = 1
+        props.node.dtype = DataTypes.DtStr
       } else if (!props.node.dtype) {
-        props.node.dtype = 1
+        props.node.dtype = DataTypes.DtStr
       }
     }
   },
@@ -109,12 +109,12 @@ const handleOpChange = (val: number) => {
   } else {
     props.node.children = []
     if (isInOp(val)) {
-      props.node.dtype = 1
+      props.node.dtype = DataTypes.DtStr
       props.node.s = undefined
       props.node.i = undefined
       props.node.f = undefined
     } else if (!props.node.dtype) {
-      props.node.dtype = 1
+      props.node.dtype = DataTypes.DtStr
     }
   }
   emitChange()
@@ -126,8 +126,8 @@ const generateId = () => `sub_${Date.now()}_${idCounter++}`
 const addChild = () => {
   props.node.children.push({
     id: generateId(),
-    op: 6,
-    dtype: 1,
+    op: OpTypes.OpEqual,
+    dtype: DataTypes.DtStr,
     children: []
   })
   emitChange()

@@ -2,7 +2,7 @@
   <div class="segment-list">
     <div class="segment-grid">
       <div
-        v-for="(seg, index) in segments"
+        v-for="seg in segments"
         :key="seg.id"
         class="segment-card"
         :class="{ active: selectedSegmentId === seg.id }"

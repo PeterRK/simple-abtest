@@ -112,6 +112,7 @@ const messages: Record<Locale, MessageTree> = {
     },
     list: {
       selectApp: '选择应用',
+      selectAppFirst: '请先选择应用',
       createExperiment: '新增实验',
       appCreateTitle: '新增应用',
       appDetailTitle: '应用详情',
@@ -324,6 +325,7 @@ const messages: Record<Locale, MessageTree> = {
     },
     list: {
       selectApp: 'Select App',
+      selectAppFirst: 'Please select an app first',
       createExperiment: 'New Experiment',
       appCreateTitle: 'New App',
       appDetailTitle: 'App Detail',

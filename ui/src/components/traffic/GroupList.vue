@@ -313,12 +313,9 @@ const handleUpdate = async () => {
     const forceHit = buildForceHitList(forceHitText.value)
     const originalConfigId = selectedGroupDetail.value.cfg_id ?? 0
     const activeConfigId = selectedConfigId.value ?? originalConfigId
-    const hasNameChange = isGroupNameDirty.value
-    const hasForceHitChange = isForceHitDirty.value
     const nextContent = newConfigContent.value || ''
     const activeContent = selectedConfigContent.value || ''
     const hasContentChange = isConfigContentDirty.value
-    const hasConfigChange = isConfigSelectionDirty.value
     let nextConfigId = activeConfigId
     let nextConfigContent = activeContent
     let createdConfigId: number | null = null

@@ -31,6 +31,7 @@ declare module 'vue' {
     ElSwitch: typeof import('element-plus/es')['ElSwitch']
     ElTable: typeof import('element-plus/es')['ElTable']
     ElTableColumn: typeof import('element-plus/es')['ElTableColumn']
+    ElTooltip: typeof import('element-plus/es')['ElTooltip']
     FilterEditor: typeof import('./src/components/FilterEditor.vue')['default']
     FilterNode: typeof import('./src/components/FilterNode.vue')['default']
     GroupList: typeof import('./src/components/traffic/GroupList.vue')['default']

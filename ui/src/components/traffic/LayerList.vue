@@ -263,7 +263,7 @@ const openRebalanceDialog = (layer: Layer) => {
   rebalanceVisible.value = true
 }
 
-const updateRanges = (index: number) => {
+const updateRanges = (_index: number) => {
   const list = rebalanceSegments.value
   if (list.length === 0) return
   let currentEnd = 0
