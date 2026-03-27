@@ -20,6 +20,7 @@ func bindSiteOp(router *httprouter.Router) error {
 	}
 
 	router.Handle(http.MethodPost, "/engine", newEngineProxy(engine))
+	router.Handle(http.MethodGet, "/", handleRootRedirect)
 	router.Handle(http.MethodGet, "/ui/*filepath", handleUi)
 	router.Handle(http.MethodHead, "/ui/*filepath", handleUi)
 	return nil
@@ -54,6 +55,10 @@ func joinUrlPath(basePath, subPath string) string {
 	default:
 		return strings.TrimRight(basePath, "/") + "/" + strings.TrimLeft(subPath, "/")
 	}
+}
+
+func handleRootRedirect(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	http.Redirect(w, r, "/ui/", http.StatusFound)
 }
 
 func handleUi(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
