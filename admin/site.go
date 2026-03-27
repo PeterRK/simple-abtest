@@ -71,6 +71,10 @@ func handleUi(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	if err == nil {
 		return
 	}
+	if errors.Is(err, os.ErrPermission) {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
 	if !errors.Is(err, os.ErrNotExist) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -85,7 +89,26 @@ func handleUi(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 }
 
 func serveUiFile(w http.ResponseWriter, r *http.Request, name string) error {
-	localName := filepath.Join(uiResourceDir, filepath.FromSlash(strings.TrimPrefix(name, "/")))
+	baseDir, err := filepath.Abs(uiResourceDir)
+	if err != nil {
+		return err
+	}
+
+	localName, err := filepath.Abs(filepath.Join(baseDir,
+		filepath.FromSlash(strings.TrimPrefix(name, "/"))))
+	if err != nil {
+		return err
+	}
+
+	// Keep the resolved file path within the configured UI resource directory.
+	rel, err := filepath.Rel(baseDir, localName)
+	if err != nil {
+		return err
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return os.ErrPermission
+	}
+
 	file, err := os.Open(localName)
 	if err != nil {
 		return err
