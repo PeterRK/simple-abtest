@@ -7,7 +7,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { deleteUser, updateUserPassword } from '@/api'
 import { isStrongPassword } from '@/utils/password'
 
-const { locale, setLocale, t } = useI18n()
+const { locale, localeOptions, setLocale, t } = useI18n()
 const { session, isLoggedIn } = useAuth()
 const accountDialogVisible = ref(false)
 const accountForm = ref({ oldPassword: '', newPassword: '' })
@@ -120,9 +120,13 @@ onMounted(() => {
       </div>
       <div class="lang-switcher">
         <span class="lang-label">{{ t('app.language') }}</span>
-        <el-select :model-value="locale" style="width: 120px" size="small" @change="handleLocaleChange">
-          <el-option value="zh-CN" :label="t('app.langZh')" />
-          <el-option value="en-US" :label="t('app.langEn')" />
+        <el-select :model-value="locale" class="lang-select" size="small" @change="handleLocaleChange">
+          <el-option
+            v-for="option in localeOptions"
+            :key="option.value"
+            :value="option.value"
+            :label="option.label"
+          />
         </el-select>
       </div>
     </el-header>
@@ -173,6 +177,9 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+.lang-select {
+  width: 148px;
 }
 .session-actions {
   display: inline-flex;

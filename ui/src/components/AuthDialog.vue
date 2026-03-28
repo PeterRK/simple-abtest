@@ -13,7 +13,7 @@ const router = useRouter()
 const mode = ref<'login' | 'register'>('login')
 const loading = ref(false)
 const form = ref({ name: '', password: '', confirmPassword: '', secret: '' })
-const { t, locale, setLocale } = useI18n()
+const { t, locale, localeOptions, setLocale } = useI18n()
 const userNameMaxLength = getNameMaxLength('user')
 
 const handleLocaleChange = (nextLocale: string) => {
@@ -95,9 +95,13 @@ const switchMode = () => {
         <span>{{ mode === 'login' ? t('auth.loginTitle') : t('auth.registerTitle') }}</span>
         <div class="auth-lang">
           <span class="auth-lang-label">{{ t('app.language') }}</span>
-          <el-select :model-value="locale" size="small" style="width: 120px" @change="handleLocaleChange">
-            <el-option value="zh-CN" :label="t('app.langZh')" />
-            <el-option value="en-US" :label="t('app.langEn')" />
+          <el-select :model-value="locale" class="auth-lang-select" size="small" @change="handleLocaleChange">
+            <el-option
+              v-for="option in localeOptions"
+              :key="option.value"
+              :value="option.value"
+              :label="option.label"
+            />
           </el-select>
         </div>
       </div>
@@ -140,6 +144,9 @@ const switchMode = () => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.auth-lang-select {
+  width: 148px;
 }
 .auth-lang-label {
   color: #606266;

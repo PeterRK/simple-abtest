@@ -1,6 +1,6 @@
 # simple-abtest
 
-[中文](README.md)
+[中文](README.md) | [English](README-EN.md) | [Español](README-ES.md) | [Français](README-FR.md) | [日本語](README-JA.md) | [Deutsch](README-DE.md)
 
 `simple-abtest` is a self-hosted A/B testing platform for centralized experiment management, online traffic allocation, and local SDK-based evaluation. It is designed for teams that want full control over experiment configuration, request flows, and data assets.
 
