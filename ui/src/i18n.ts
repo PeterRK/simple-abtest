@@ -6,12 +6,34 @@ interface MessageTree {
 
 export type Locale = 'zh-CN' | 'en-US'
 
+const LOCALE_STORAGE_KEY = 'simple-abtest.locale'
+const isLocale = (value: unknown): value is Locale => value === 'zh-CN' || value === 'en-US'
+
+const loadStoredLocale = (): Locale => {
+  if (typeof window === 'undefined') return 'zh-CN'
+  try {
+    const stored = window.localStorage.getItem(LOCALE_STORAGE_KEY)
+    return isLocale(stored) ? stored : 'zh-CN'
+  } catch {
+    return 'zh-CN'
+  }
+}
+
+const persistLocale = (nextLocale: Locale) => {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(LOCALE_STORAGE_KEY, nextLocale)
+  } catch {
+    // ignore storage failures and keep runtime locale working
+  }
+}
+
 const messages: Record<Locale, MessageTree> = {
   'zh-CN': {
     app: {
-      title: 'AB测试平台',
-      experiments: '实验信息',
-      verify: '在线验证',
+      title: 'AB实验平台',
+      experiments: '实验管理',
+      verify: '在线验流',
       profile: '我的账号',
       accountSettings: '账号',
       login: '登录/注册',
@@ -39,9 +61,9 @@ const messages: Record<Locale, MessageTree> = {
     message: {
       failedLoadApps: '加载应用失败',
       failedLoadExperiments: '加载实验失败',
-      failedLoadLayer: '加载 Layer 失败',
-      failedLoadSegment: '加载 Segment 失败',
-      failedLoadGroup: '加载 Group 失败',
+      failedLoadLayer: '加载实验层失败',
+      failedLoadSegment: '加载流量段失败',
+      failedLoadGroup: '加载实验组失败',
       failedLoadConfigs: '加载配置历史失败',
       failedLoadConfigContent: '加载配置内容失败',
       appCreated: '应用已创建',
@@ -51,18 +73,18 @@ const messages: Record<Locale, MessageTree> = {
       experimentUpdated: '实验已更新',
       experimentDeleted: '实验已删除',
       statusUpdated: '状态已更新',
-      layerCreated: 'Layer 已创建',
-      layerUpdated: 'Layer 已更新',
-      layerDeleted: 'Layer 已删除',
-      segmentCreated: 'Segment 已创建',
-      segmentDeleted: 'Segment 已删除',
-      segmentsRebalanced: 'Segment 流量已调整',
-      groupCreated: 'Group 已创建',
-      groupUpdated: 'Group 已更新',
-      groupDeleted: 'Group 已删除',
-      shareUpdated: '流量已更新',
-      segmentSeedShuffled: 'Segment seed 已打散',
-      shuffled: '流量已打散',
+      layerCreated: '实验层已创建',
+      layerUpdated: '实验层已更新',
+      layerDeleted: '实验层已删除',
+      segmentCreated: '流量段已创建',
+      segmentDeleted: '流量段已删除',
+      segmentsRebalanced: '流量段比例已更新',
+      groupCreated: '实验组已创建',
+      groupUpdated: '实验组已更新',
+      groupDeleted: '实验组已删除',
+      shareUpdated: '分组流量已更新',
+      segmentSeedShuffled: '流量桶已重新打散',
+      shuffled: '实验流量已重新打散',
       updateFailed: '更新失败',
       createFailed: '创建失败',
       deleteFailed: '删除失败',
@@ -71,14 +93,14 @@ const messages: Record<Locale, MessageTree> = {
       rebalanceFailedRefresh: '调整失败，请手动刷新后重试',
       appVersionMissing: '应用版本缺失',
       appInfoMissing: '无法获取应用信息',
-      appTokenMissing: '应用 Access Token 缺失，请刷新后重试',
-      invalidTokenTTL: 'Access Token 有效期必须大于 0',
-      tokenIssued: 'Access Token 已生成',
-      issueTokenFailed: '申请 Access Token 失败',
-      issueTokenForbidden: '仅应用管理员可以申请 Access Token',
-      verifyRequired: 'App ID 和 Key 为必填项',
-      verifyFailed: '验证失败',
-      verifyContextInvalidJson: '上下文不是合法 JSON',
+      appTokenMissing: '应用Access Token缺失，请刷新后重试',
+      invalidTokenTTL: 'Access Token有效期必须大于 0',
+      tokenIssued: 'Access Token已生成',
+      issueTokenFailed: '申请Access Token失败',
+      issueTokenForbidden: '仅应用管理员可以申请Access Token',
+      verifyRequired: '应用ID和分流Key为必填项',
+      verifyFailed: '验流失败',
+      verifyContextInvalidJson: '上下文不是合法JSON',
       verifyContextKeyRequired: '上下文字段名不能为空',
       verifyContextKeyDuplicate: '上下文字段名不能重复',
       authRequired: '用户名和密码均不能为空',
@@ -104,19 +126,19 @@ const messages: Record<Locale, MessageTree> = {
       invalidFilter: '过滤条件不合法',
       invalidExpr: '表达式结构非法',
       invalidLogicArgs: '逻辑算子参数不合法',
-      invalidInArgs: 'IN 算子参数不合法',
+      invalidInArgs: 'IN算子参数不合法',
       invalidCompareArgs: '比较算子参数不合法',
       missingTargetGroup: '未找到目标组或默认组，请刷新后重试',
-      invalidShareRange: '流量不合法，仅可在 {min} ~ {max} 范围内调整',
-      sumShareMust100: '流量百分比总和需为 100',
-      invalidJsonFormat: '输入内容不是合法 JSON，无法格式化'
+      invalidShareRange: '分组流量不合法，只能在 {min} ~ {max} 范围内调整',
+      sumShareMust100: '流量占比总和必须为 100',
+      invalidJsonFormat: '输入内容不是合法JSON，无法格式化'
     },
     confirm: {
       deleteApp: '确定删除该应用？',
       deleteExperiment: '确认删除该实验？',
-      deleteLayer: '确认删除该 Layer？',
-      deleteSegment: '确认删除该 Segment？需先确保区间为空。',
-      deleteGroup: '确认删除该 Group？',
+      deleteLayer: '确认删除该实验层？',
+      deleteSegment: '确认删除该流量段？请先确保该区间为空。',
+      deleteGroup: '确认删除该实验组？',
       deleteUser: '确认注销当前账号？此操作不可恢复。',
       logout: '确认退出登录？'
     },
@@ -125,8 +147,8 @@ const messages: Record<Locale, MessageTree> = {
       selectAppFirst: '请先选择应用',
       createExperiment: '新增实验',
       appCreateTitle: '新增应用',
-      appDetailTitle: '应用详情',
-      issueAccessToken: '申请 Access Token',
+      appDetailTitle: '应用信息',
+      issueAccessToken: '申请Access Token',
       experimentCreateTitle: '新增实验'
     },
     token: {
@@ -135,13 +157,13 @@ const messages: Record<Locale, MessageTree> = {
       issue: '申请'
     },
     detail: {
-      expName: '实验名',
+      expName: '实验名称',
       expDesc: '实验描述',
       filter: '过滤条件',
-      createLayer: '新增 Layer',
-      appPrivilege: '授权情况',
+      createLayer: '新增实验层',
+      appPrivilege: '授权',
       privilegeTitle: '应用授权管理',
-      privilegeLevel: '权限级别',
+      privilegeLevel: '权限',
       grantor: '授权人',
       targetUser: '用户名',
       grant: '授予',
@@ -161,7 +183,7 @@ const messages: Record<Locale, MessageTree> = {
     },
     profile: {
       title: '账号信息',
-      uid: '用户 ID',
+      uid: '用户ID',
       changePassword: '修改密码',
       updatePassword: '更新密码',
       deleteUser: '注销账号'
@@ -172,7 +194,7 @@ const messages: Record<Locale, MessageTree> = {
       newPassword: '新密码',
       updatePassword: '修改密码',
       logout: '退出登录',
-      deleteUser: '删除账号'
+      deleteUser: '注销账号'
     },
     privilege: {
       none: '无权限',
@@ -181,19 +203,18 @@ const messages: Record<Locale, MessageTree> = {
       admin: '管理员'
     },
     verify: {
-      title: '在线验证',
+      title: '在线验流',
       application: '应用',
-      viewAccessToken: '查看 Token',
-      key: 'Key',
+      key: '分流Key',
       context: '上下文',
       contextKey: '字段名',
       contextValue: '字段值',
       addContext: '新增字段',
-      selectApp: '选择',
-      keyPlaceholder: '用户 ID / 设备 ID',
-      button: '验证',
-      result: '结果',
-      resultEmpty: '结果会显示在这里'
+      selectApp: '选择应用',
+      keyPlaceholder: '用户ID/设备ID',
+      button: '开始验流',
+      result: '命中结果',
+      resultEmpty: '验流结果会显示在这里'
     },
     filter: {
       empty: '无过滤条件',
@@ -212,39 +233,39 @@ const messages: Record<Locale, MessageTree> = {
       dtypeFloat: '浮点数'
     },
     layer: {
-      fallbackName: 'Layer {index}',
-      namePlaceholder: '层名',
+      fallbackName: '实验层 {index}',
+      namePlaceholder: '实验层名称',
       rename: '改名',
-      addSegment: '新增 Segment',
-      rebalanceSegment: '调整 Segment 流量',
-      createTitle: '新增 Layer',
-      rebalanceTitle: '调整 Segment 流量',
+      addSegment: '新增流量段',
+      rebalanceSegment: '调整流量段比例',
+      createTitle: '新增实验层',
+      rebalanceTitle: '调整流量段比例',
       percent: '占比',
-      begin: '开始',
-      end: '结束',
-      sharePercent: '流量百分比'
+      begin: '起点',
+      end: '终点',
+      sharePercent: '流量占比'
     },
     group: {
-      rebalance: '调整流量',
-      createGroup: '新增 Group',
+      rebalance: '调整分组流量',
+      createGroup: '新增实验组',
       shuffle: '流量打散',
-      groupName: '组名',
-      formatInput: '格式化输入',
-      searchConfig: '配置查找',
+      groupName: '实验组名称',
+      formatInput: '格式化JSON',
+      searchConfig: '查询历史配置',
       dayAgo: '天前',
-      forceHitPlaceholder: '强制命中 key，每行一个',
+      forceHitPlaceholder: '强制命中Key，每行一个',
       configPlaceholder: '配置内容',
-      configId: '配置 ID',
-      updateTime: '更新时间',
-      createTitle: '新增 Group',
-      rebalanceTitle: '扩缩容'
+      configId: '配置ID',
+      updateTime: '创建时间',
+      createTitle: '新增实验组',
+      rebalanceTitle: '调整分组流量'
     }
   },
   'en-US': {
     app: {
-      title: 'AB Testing Platform',
+      title: 'A/B Test Platform',
       experiments: 'Experiments',
-      verify: 'Verify',
+      verify: 'Traffic Check',
       profile: 'My Account',
       accountSettings: 'Account',
       login: 'Login/Register',
@@ -266,7 +287,7 @@ const messages: Record<Locale, MessageTree> = {
       cancel: 'Cancel',
       confirm: 'Confirm',
       warning: 'Warning',
-      detail: 'Detail',
+      detail: 'Details',
       operation: 'Operation'
     },
     message: {
@@ -289,13 +310,13 @@ const messages: Record<Locale, MessageTree> = {
       layerDeleted: 'Layer deleted',
       segmentCreated: 'Segment created',
       segmentDeleted: 'Segment deleted',
-      segmentsRebalanced: 'Segments rebalanced',
+      segmentsRebalanced: 'Segment ratios updated',
       groupCreated: 'Group created',
       groupUpdated: 'Group updated',
       groupDeleted: 'Group deleted',
-      shareUpdated: 'Share updated',
-      segmentSeedShuffled: 'Segment seed shuffled',
-      shuffled: 'Shuffled',
+      shareUpdated: 'Traffic split updated',
+      segmentSeedShuffled: 'Traffic buckets reshuffled',
+      shuffled: 'Traffic reshuffled',
       updateFailed: 'Update failed',
       createFailed: 'Create failed',
       deleteFailed: 'Delete failed',
@@ -306,11 +327,11 @@ const messages: Record<Locale, MessageTree> = {
       appInfoMissing: 'Unable to resolve app info',
       appTokenMissing: 'App access token is missing. Refresh and retry',
       invalidTokenTTL: 'Access token TTL must be greater than 0',
-      tokenIssued: 'Access token issued',
+      tokenIssued: 'Access token created',
       issueTokenFailed: 'Failed to issue access token',
       issueTokenForbidden: 'Only app admins can issue access tokens',
       verifyRequired: 'App ID and Key are required',
-      verifyFailed: 'Verification failed',
+      verifyFailed: 'Traffic check failed',
       verifyContextInvalidJson: 'Context is not valid JSON',
       verifyContextKeyRequired: 'Context field name is required',
       verifyContextKeyDuplicate: 'Context field names must be unique',
@@ -332,15 +353,15 @@ const messages: Record<Locale, MessageTree> = {
       passwordUpdated: 'Password updated',
       userDeleted: 'Account deleted',
       failedLoadPrivileges: 'Failed to load privileges',
-      privilegeUpdated: 'Privilege updated',
+      privilegeUpdated: 'Access updated',
       privilegeUpdateForbidden: 'Only app admins can modify privileges',
-      invalidFilter: 'Invalid filter condition',
+      invalidFilter: 'Invalid filter',
       invalidExpr: 'Invalid expression structure',
       invalidLogicArgs: 'Invalid logical operator arguments',
       invalidInArgs: 'Invalid IN operator arguments',
       invalidCompareArgs: 'Invalid compare operator arguments',
       missingTargetGroup: 'Target group or default group not found, please refresh',
-      invalidShareRange: 'Invalid share. Allowed range: {min} ~ {max}',
+      invalidShareRange: 'Invalid split. Allowed range: {min} ~ {max}',
       sumShareMust100: 'The total share percentage must be 100',
       invalidJsonFormat: 'The input is not valid JSON and cannot be formatted'
     },
@@ -358,7 +379,7 @@ const messages: Record<Locale, MessageTree> = {
       selectAppFirst: 'Please select an app first',
       createExperiment: 'New Experiment',
       appCreateTitle: 'New App',
-      appDetailTitle: 'App Detail',
+      appDetailTitle: 'App Info',
       issueAccessToken: 'Issue Access Token',
       experimentCreateTitle: 'New Experiment'
     },
@@ -369,12 +390,12 @@ const messages: Record<Locale, MessageTree> = {
     },
     detail: {
       expName: 'Experiment Name',
-      expDesc: 'Experiment Description',
+      expDesc: 'Description',
       filter: 'Filter',
       createLayer: 'New Layer',
-      appPrivilege: 'Privileges',
-      privilegeTitle: 'App Privilege Management',
-      privilegeLevel: 'Privilege',
+      appPrivilege: 'Permissions',
+      privilegeTitle: 'App Permissions',
+      privilegeLevel: 'Permission',
       grantor: 'Grantor',
       targetUser: 'Username',
       grant: 'Grant',
@@ -409,14 +430,13 @@ const messages: Record<Locale, MessageTree> = {
     },
     privilege: {
       none: 'No Access',
-      read: 'Read Only',
+      read: 'Read-Only',
       write: 'Read/Write',
       admin: 'Admin'
     },
     verify: {
-      title: 'Online Verify',
-      application: 'Application',
-      viewAccessToken: 'View Token',
+      title: 'Traffic Check',
+      application: 'APP',
       key: 'Key',
       context: 'Context',
       contextKey: 'Field',
@@ -424,9 +444,9 @@ const messages: Record<Locale, MessageTree> = {
       addContext: 'Add Field',
       selectApp: 'Select',
       keyPlaceholder: 'User ID / Device ID',
-      button: 'Verify',
-      result: 'Result',
-      resultEmpty: 'Verification output appears here'
+      button: 'Run',
+      result: 'Hit Result',
+      resultEmpty: 'Results appear here'
     },
     filter: {
       empty: 'No filter condition',
@@ -458,24 +478,24 @@ const messages: Record<Locale, MessageTree> = {
       sharePercent: 'Share Percentage'
     },
     group: {
-      rebalance: 'Rebalance',
+      rebalance: 'Adjust Split',
       createGroup: 'New Group',
-      shuffle: 'Shuffle',
+      shuffle: 'Reshuffle',
       groupName: 'Group name',
-      formatInput: 'Format Input',
-      searchConfig: 'Find Config',
+      formatInput: 'Format JSON',
+      searchConfig: 'View History',
       dayAgo: 'days ago',
       forceHitPlaceholder: 'Force-hit keys, one per line',
       configPlaceholder: 'Config content',
       configId: 'Config ID',
-      updateTime: 'Updated At',
+      updateTime: 'Created At',
       createTitle: 'New Group',
-      rebalanceTitle: 'Rebalance'
+      rebalanceTitle: 'Adjust Split'
     }
   }
 }
 
-export const locale = ref<Locale>('zh-CN')
+export const locale = ref<Locale>(loadStoredLocale())
 
 const getByPath = (obj: MessageTree, path: string): string | MessageTree | undefined => {
   const parts = path.split('.')
@@ -501,6 +521,7 @@ export const t = (key: string, params?: Record<string, string | number>) => {
 
 export const setLocale = (nextLocale: Locale) => {
   locale.value = nextLocale
+  persistLocale(nextLocale)
 }
 
 export const useI18n = () => ({

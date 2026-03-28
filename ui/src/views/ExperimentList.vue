@@ -624,19 +624,19 @@ watch(
       </template>
     </el-dialog>
 
-    <el-dialog v-model="privilegeDialogVisible" :title="t('detail.privilegeTitle')" width="680px">
+    <el-dialog v-model="privilegeDialogVisible" :title="t('detail.privilegeTitle')" width="540px">
       <el-form :inline="true" :model="privilegeForm" class="privilege-form">
-        <el-form-item :label="t('detail.targetUser')">
+        <el-form-item :label="t('detail.targetUser')" class="privilege-user-item">
           <el-input v-model="privilegeForm.name" :maxlength="userNameMaxLength" />
         </el-form-item>
-        <el-form-item :label="t('detail.privilegeLevel')">
+        <el-form-item :label="t('detail.privilegeLevel')" class="privilege-level-item">
           <el-select v-model="privilegeForm.privilege" style="width: 120px">
             <el-option :label="t('privilege.read')" :value="1" />
             <el-option :label="t('privilege.write')" :value="2" />
             <el-option :label="t('privilege.admin')" :value="3" />
           </el-select>
         </el-form-item>
-        <el-form-item>
+        <el-form-item class="privilege-submit-item">
           <el-button type="primary" @click="submitPrivilege">{{ t('detail.grant') }}</el-button>
         </el-form-item>
       </el-form>
@@ -714,6 +714,41 @@ watch(
 }
 .privilege-form {
   margin-bottom: 12px;
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+.privilege-form :deep(.el-form-item) {
+  margin-right: 0;
+  margin-bottom: 0;
+}
+.privilege-user-item {
+  flex: 1 1 260px;
+}
+.privilege-user-item :deep(.el-input) {
+  width: 100%;
+}
+.privilege-level-item {
+  flex: 0 0 auto;
+}
+.privilege-submit-item {
+  margin-left: auto;
+}
+.privilege-submit-item :deep(.el-form-item__content) {
+  justify-content: flex-end;
+}
+@media (max-width: 720px) {
+  .privilege-form {
+    flex-wrap: wrap;
+  }
+  .privilege-user-item,
+  .privilege-level-item,
+  .privilege-submit-item {
+    flex: 1 1 100%;
+  }
+  .privilege-submit-item {
+    margin-left: 0;
+  }
 }
 :deep(.clickable-row) {
     cursor: pointer;

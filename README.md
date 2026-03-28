@@ -1,5 +1,7 @@
 # simple-abtest
 
+[English](README-EN.md)
+
 `simple-abtest` 是一套可自部署的A/B实验平台，帮助团队统一管理实验、在线分流并支持本地SDK判定。适合希望自己掌控实验配置、访问链路和数据资产的团队。
 
 ## 功能亮点
@@ -16,7 +18,7 @@
 ### 列表页
 ![](images/list.png)
 ### 详情页
-![](images/ui.png)
+![](images/detail.png)
 ### 验证页
 ![](images/verify.png)
 ### 使用注意

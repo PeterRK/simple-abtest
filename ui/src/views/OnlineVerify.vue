@@ -191,8 +191,11 @@ const removeContextEntry = (id: number) => {
 .verify-form {
   margin-top: 0;
 }
+.verify-form :deep(.el-form-item__content) {
+  width: 100%;
+}
 .verify-app-row {
-  width: 360px;
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -202,13 +205,13 @@ const removeContextEntry = (id: number) => {
   min-width: 0;
 }
 .verify-input {
-  width: 360px;
+  width: 100%;
 }
 .context-form-item :deep(.el-form-item__content) {
   align-items: flex-start;
 }
 .context-editor {
-  width: 360px;
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 10px;
