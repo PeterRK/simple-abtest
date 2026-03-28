@@ -75,6 +75,7 @@ const messages: Record<Locale, MessageTree> = {
       invalidTokenTTL: 'Access Token 有效期必须大于 0',
       tokenIssued: 'Access Token 已生成',
       issueTokenFailed: '申请 Access Token 失败',
+      issueTokenForbidden: '仅应用管理员可以申请 Access Token',
       verifyRequired: 'App ID 和 Key 为必填项',
       verifyFailed: '验证失败',
       verifyContextInvalidJson: '上下文不是合法 JSON',
@@ -97,6 +98,7 @@ const messages: Record<Locale, MessageTree> = {
       userDeleted: '账号已注销',
       failedLoadPrivileges: '加载授权失败',
       privilegeUpdated: '授权已更新',
+      privilegeUpdateForbidden: '仅应用管理员可以修改授权',
       invalidFilter: '过滤条件不合法',
       invalidExpr: '表达式结构非法',
       invalidLogicArgs: '逻辑算子参数不合法',
@@ -140,6 +142,7 @@ const messages: Record<Locale, MessageTree> = {
       privilegeLevel: '权限级别',
       grantor: '授权人',
       targetUser: '用户名',
+      grant: '授予',
       revoke: '撤销'
     },
     auth: {
@@ -300,6 +303,7 @@ const messages: Record<Locale, MessageTree> = {
       invalidTokenTTL: 'Access token TTL must be greater than 0',
       tokenIssued: 'Access token issued',
       issueTokenFailed: 'Failed to issue access token',
+      issueTokenForbidden: 'Only app admins can issue access tokens',
       verifyRequired: 'App ID and Key are required',
       verifyFailed: 'Verification failed',
       verifyContextInvalidJson: 'Context is not valid JSON',
@@ -322,6 +326,7 @@ const messages: Record<Locale, MessageTree> = {
       userDeleted: 'Account deleted',
       failedLoadPrivileges: 'Failed to load privileges',
       privilegeUpdated: 'Privilege updated',
+      privilegeUpdateForbidden: 'Only app admins can modify privileges',
       invalidFilter: 'Invalid filter condition',
       invalidExpr: 'Invalid expression structure',
       invalidLogicArgs: 'Invalid logical operator arguments',
@@ -365,6 +370,7 @@ const messages: Record<Locale, MessageTree> = {
       privilegeLevel: 'Privilege',
       grantor: 'Grantor',
       targetUser: 'Username',
+      grant: 'Grant',
       revoke: 'Revoke'
     },
     auth: {

@@ -393,7 +393,7 @@ func appGetPrivilege(w http.ResponseWriter, r *http.Request, p httprouter.Params
 	if !ok {
 		return
 	}
-	if _, ok := requireAppPrivilege(ctx, w, r, appId, privilegeAdmin); !ok {
+	if _, ok := requireAppPrivilege(ctx, w, r, appId, privilegeReadOnly); !ok {
 		return
 	}
 

@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue'
 import { getApps, createApp, updateApp, deleteApp, getApp, createExp, switchExp, issueAppToken, getAppPrivileges, grantAppPrivilege } from '@/api'
 import type { Application, Experiment } from '@/types'
@@ -258,7 +258,12 @@ const submitPrivilege = async () => {
     privilegeForm.value = { name: '', privilege: 1 }
     await loadPrivileges()
   } catch (e) {
-    ElMessage.error(t('message.operationFailed'))
+    const status = (e as { response?: { status?: number } })?.response?.status
+    if (status === 403) {
+      ElMessage.error(t('message.privilegeUpdateForbidden'))
+    } else {
+      ElMessage.error(t('message.operationFailed'))
+    }
   }
 }
 
@@ -269,7 +274,12 @@ const revokePrivilege = async (name: string) => {
     ElMessage.success(t('message.privilegeUpdated'))
     await loadPrivileges()
   } catch (e) {
-    ElMessage.error(t('message.operationFailed'))
+    const status = (e as { response?: { status?: number } })?.response?.status
+    if (status === 403) {
+      ElMessage.error(t('message.privilegeUpdateForbidden'))
+    } else {
+      ElMessage.error(t('message.operationFailed'))
+    }
   }
 }
 
@@ -288,7 +298,12 @@ const handleIssueToken = async () => {
     issuedTokenExpireAt.value = res.data.expire_at
     ElMessage.success(t('message.tokenIssued'))
   } catch (e) {
-    ElMessage.error(t('message.issueTokenFailed'))
+    const status = (e as { response?: { status?: number } })?.response?.status
+    if (status === 403) {
+      ElMessage.error(t('message.issueTokenForbidden'))
+    } else {
+      ElMessage.error(t('message.issueTokenFailed'))
+    }
   } finally {
     tokenLoading.value = false
   }
@@ -622,7 +637,7 @@ watch(
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="submitPrivilege">{{ t('common.confirm') }}</el-button>
+          <el-button type="primary" @click="submitPrivilege">{{ t('detail.grant') }}</el-button>
         </el-form-item>
       </el-form>
 
@@ -704,3 +719,4 @@ watch(
     cursor: pointer;
 }
 </style>
+
