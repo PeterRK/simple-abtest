@@ -164,7 +164,7 @@ Get granted users of an app.
 
 Permission:
 
-- app `admin`
+- app `read-only`
 
 Response `200 OK`:
 
@@ -330,10 +330,6 @@ Response `200 OK`:
 
 Notes:
 
-- `name` must match the common name validation rule, max length `32`.
-
-Notes:
-
 - `ttl_seconds` must be positive.
 - if the derived `expire_at` cannot fit into the token's uint32 unix-seconds field, server returns `400 Bad Request`.
 - returned `token` is a short-lived public token signed from the app's stored `access_token`; it is not the stored secret itself.
@@ -353,10 +349,6 @@ Request:
 ```
 
 Response: `200 OK` empty body.
-
-Notes:
-
-- `name` must match the common name validation rule, max length `32`.
 
 Notes:
 
@@ -394,10 +386,6 @@ Response `200 OK`:
   "tags": ["layerA:control"]
 }
 ```
-
-Notes:
-
-- `name` must match the common name validation rule, max length `32`.
 
 Notes:
 
@@ -875,3 +863,4 @@ Get one config content.
 Permission: group `read-only`.
 
 Response `200 OK`: raw content body.
+

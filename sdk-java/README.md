@@ -1,13 +1,13 @@
 # simple-abtest Java SDK
 
-`sdk-java` 是 `simple-abtest` 的 Java 本地判定 SDK，行为对齐 `sdk-go` 和 `sdk-cpp`：
+`sdk-java`是`simple-abtest`的Java本地判定SDK，行为对齐`sdk-go`和`sdk-cpp`：
 
-- 初始化时同步拉取 `GET /app/:id`
+- 初始化时同步拉取`GET /app/:id`
 - 可选后台定时刷新实验快照
 - 在本地完成表达式过滤和分流判定
-- 返回每个 layer 的配置和命中标签
+- 返回每个layer的配置和命中标签
 
-项目采用标准 Maven 结构，JSON 解析使用 Gson。
+项目采用标准Maven结构，JSON解析使用Gson。
 
 ## 构建与测试
 
@@ -35,3 +35,4 @@ public class Demo {
     }
 }
 ```
+

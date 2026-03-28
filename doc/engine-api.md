@@ -78,3 +78,4 @@ gzip -dc app.json.gz | jq .
 - `400`: invalid `id`.
 - `401`: missing or invalid `ACCESS_TOKEN`.
 - `404`: app not found.
+
