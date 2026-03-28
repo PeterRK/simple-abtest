@@ -8,6 +8,7 @@ import LayerList from '@/components/traffic/LayerList.vue'
 import FilterEditor from '@/components/FilterEditor.vue'
 import { serializeExprNodes, validateExprNodes } from '@/utils/filter'
 import { useI18n } from '@/i18n'
+import { getNameMaxLength, validateName } from '@/utils/name'
 
 type AppSnapshot = {
   id: number
@@ -36,6 +37,8 @@ const privilegeDialogVisible = ref(false)
 const privilegeLoading = ref(false)
 const privileges = ref<{ name: string; privilege: number; grantor: string }[]>([])
 const privilegeForm = ref({ name: '', privilege: 1 })
+const experimentNameMaxLength = getNameMaxLength('experiment')
+const userNameMaxLength = getNameMaxLength('user')
 
 const getFilterText = (filter?: Experiment['filter']) => serializeExprNodes(filter)
 const normalizeText = (text?: string) => text || ''
@@ -89,6 +92,11 @@ const loadExp = async () => {
 const handleUpdate = async () => {
     if (!experiment.value) return
     if (!isExperimentDirty.value) return
+    const nameValidation = validateName(experiment.value.name, 'experiment')
+    if (!nameValidation.valid) {
+      ElMessage.error(t(nameValidation.messageKey, { max: nameValidation.max }))
+      return
+    }
     const validation = validateExprNodes(experiment.value.filter || [])
     if (!validation.valid) {
       ElMessage.error(validation.messageKey ? t(validation.messageKey) : t('message.invalidFilter'))
@@ -96,12 +104,13 @@ const handleUpdate = async () => {
     }
     try {
         await updateExp(experiment.value.id, {
-            name: experiment.value.name,
+            name: nameValidation.normalized,
             description: experiment.value.description,
             version: experiment.value.version,
             filter: experiment.value.filter
         })
         ElMessage.success(t('message.experimentUpdated'))
+        experiment.value.name = nameValidation.normalized
         experiment.value.version = experiment.value.version + 1
         syncSnapshot(experiment.value)
     } catch(e) {
@@ -230,13 +239,14 @@ const submitPrivilege = async () => {
     ElMessage.error(t('message.appInfoMissing'))
     return
   }
-  if (!privilegeForm.value.name.trim()) {
-    ElMessage.error(t('detail.targetUser'))
+  const nameValidation = validateName(privilegeForm.value.name, 'user')
+  if (!nameValidation.valid) {
+    ElMessage.error(t(nameValidation.messageKey, { max: nameValidation.max }))
     return
   }
   try {
     await grantAppPrivilege(appId.value, {
-      name: privilegeForm.value.name.trim(),
+      name: nameValidation.normalized,
       privilege: privilegeForm.value.privilege
     })
     ElMessage.success(t('message.privilegeUpdated'))
@@ -272,6 +282,7 @@ onMounted(() => {
       <div class="exp-row">
         <el-input
           v-model="experiment.name"
+          :maxlength="experimentNameMaxLength"
           :placeholder="t('detail.expName')"
           :class="{ 'dirty-input': isExperimentNameDirty }"
         />
@@ -306,7 +317,7 @@ onMounted(() => {
     <el-dialog v-model="privilegeDialogVisible" :title="t('detail.privilegeTitle')" width="680px">
       <el-form :inline="true" :model="privilegeForm" class="privilege-form">
         <el-form-item :label="t('detail.targetUser')">
-          <el-input v-model="privilegeForm.name" />
+          <el-input v-model="privilegeForm.name" :maxlength="userNameMaxLength" />
         </el-form-item>
         <el-form-item :label="t('detail.privilegeLevel')">
           <el-select v-model="privilegeForm.privilege" style="width: 120px">

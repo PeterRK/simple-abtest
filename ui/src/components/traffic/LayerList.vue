@@ -9,6 +9,7 @@
           <div class="layer-meta">
             <el-input
               v-model="layer.name"
+              :maxlength="layerNameMaxLength"
               :placeholder="t('layer.namePlaceholder')"
               :class="{ 'dirty-input': isLayerNameDirty(layer) }"
             />
@@ -27,7 +28,7 @@
     <el-dialog v-model="dialogVisible" :title="t('layer.createTitle')" width="360px">
       <el-form :model="form" label-width="40px">
         <el-form-item :label="t('common.name')">
-          <el-input v-model="form.name" />
+          <el-input v-model="form.name" :maxlength="layerNameMaxLength" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -70,6 +71,7 @@ import type { Experiment, Layer } from '@/types'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import SegmentList from './SegmentList.vue'
 import { useI18n } from '@/i18n'
+import { getNameMaxLength, validateName } from '@/utils/name'
 
 const props = defineProps<{
   experiment: Experiment | null
@@ -89,6 +91,7 @@ const { t } = useI18n()
 
 const dialogVisible = ref(false)
 const form = ref({ name: '' })
+const layerNameMaxLength = getNameMaxLength('layer')
 const isCancelAction = (error: unknown) => error === 'cancel' || error === 'close'
 
 const openLayerDialog = () => {
@@ -163,11 +166,16 @@ const fetchLayerDetail = async (layerId: number, force = false) => {
 
 const handleCreate = async () => {
   if (!props.experiment) return
+  const nameValidation = validateName(form.value.name, 'layer')
+  if (!nameValidation.valid) {
+    ElMessage.error(t(nameValidation.messageKey, { max: nameValidation.max }))
+    return
+  }
   try {
     const res = await createLayer({
       exp_id: props.experiment.id,
       exp_ver: props.experiment.version!,
-      name: form.value.name
+      name: nameValidation.normalized
     })
     const createdLayer: Layer = {
       ...res.data,
@@ -186,13 +194,18 @@ const handleCreate = async () => {
 const handleUpdateLayer = async (layer: Layer) => {
   const originalName = layerNameMap.value.get(layer.id)
   if (originalName === layer.name) return
+  const nameValidation = validateName(layer.name, 'layer')
+  if (!nameValidation.valid) {
+    ElMessage.error(t(nameValidation.messageKey, { max: nameValidation.max }))
+    return
+  }
   try {
     await updateLayer(layer.id, {
-      name: layer.name,
+      name: nameValidation.normalized,
       version: layer.version
     })
     ElMessage.success(t('message.layerUpdated'))
-    const nextLayer = { ...layer, version: layer.version + 1 }
+    const nextLayer = { ...layer, name: nameValidation.normalized, version: layer.version + 1 }
     emitLayersUpdate(layers.value.map(item => (item.id === nextLayer.id ? nextLayer : item)))
     layerNameMap.value.set(nextLayer.id, nextLayer.name)
   } catch (e) {

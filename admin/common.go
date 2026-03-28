@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"net/http"
+	"regexp"
 	"strconv"
 
 	"github.com/julienschmidt/httprouter"
@@ -15,11 +16,25 @@ type Context struct {
 	*utils.ContextLogger
 }
 
+const (
+	maxAppNameLen   = 64
+	maxUserNameLen  = 64
+	maxExpNameLen   = 32
+	maxLayerNameLen = 32
+	maxGroupNameLen = 32
+)
+
+var validNamePattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
 func NewContext(ctx context.Context, tag string) *Context {
 	return &Context{
 		Context:       ctx,
 		ContextLogger: utils.NewContextLogger(tag),
 	}
+}
+
+func validName(name string, maxLen int) bool {
+	return len(name) != 0 && len(name) <= maxLen && validNamePattern.MatchString(name)
 }
 
 func parseUintParam(w http.ResponseWriter, p httprouter.Params, key string) (uint32, bool) {

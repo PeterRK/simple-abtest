@@ -7,6 +7,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from '@/i18n'
 import { useAuth } from '@/auth'
 import { useRecentApp } from '@/composables/useRecentApp'
+import { getNameMaxLength, validateName } from '@/utils/name'
 
 const router = useRouter()
 const route = useRoute()
@@ -44,6 +45,8 @@ const tokenForm = ref({ ttlDays: 1 })
 const tokenLoading = ref(false)
 const issuedToken = ref('')
 const issuedTokenExpireAt = ref('')
+const appNameMaxLength = getNameMaxLength('app')
+const experimentNameMaxLength = getNameMaxLength('experiment')
 
 const isAppNameDirty = computed(() => {
   if (appDialogMode.value !== 'detail' || !currentApp.value) return false
@@ -228,8 +231,16 @@ const handleIssueToken = async () => {
 }
 
 const handleCreateApp = async () => {
+  const nameValidation = validateName(appForm.value.name, 'app')
+  if (!nameValidation.valid) {
+    ElMessage.error(t(nameValidation.messageKey, { max: nameValidation.max }))
+    return
+  }
   try {
-    const res = await createApp(appForm.value)
+    const res = await createApp({
+      name: nameValidation.normalized,
+      description: appForm.value.description
+    })
     const created = res.data
     selectedAppId.value = created.id
     currentApp.value = {
@@ -255,14 +266,19 @@ const handleUpdateApp = async () => {
     return
   }
   if (!isAppDirty.value) return
+  const nameValidation = validateName(appForm.value.name, 'app')
+  if (!nameValidation.valid) {
+    ElMessage.error(t(nameValidation.messageKey, { max: nameValidation.max }))
+    return
+  }
   try {
     await updateApp(currentApp.value.id, {
-      name: appForm.value.name,
+      name: nameValidation.normalized,
       description: appForm.value.description,
       version: currentApp.value.version
     })
     ElMessage.success(t('message.appUpdated'))
-    currentApp.value.name = appForm.value.name
+    currentApp.value.name = nameValidation.normalized
     currentApp.value.description = appForm.value.description
     currentApp.value.version = currentApp.value.version + 1
     appDialogVisible.value = false
@@ -302,11 +318,16 @@ const handleExpSubmit = async () => {
     ElMessage.error(t('message.appVersionMissing'))
     return
   }
+  const nameValidation = validateName(expForm.value.name, 'experiment')
+  if (!nameValidation.valid) {
+    ElMessage.error(t(nameValidation.messageKey, { max: nameValidation.max }))
+    return
+  }
   try {
     const res = await createExp({
       app_id: app.id,
       app_ver: app.version,
-      name: expForm.value.name,
+      name: nameValidation.normalized,
       description: expForm.value.description
     })
     const created = res.data
@@ -432,8 +453,8 @@ watch(
 
     <el-table :data="experiments" style="width: 100%" v-loading="loading" @row-click="handleExpClick" row-class-name="clickable-row">
       <el-table-column prop="id" :label="t('common.id')" width="100" />
-      <el-table-column prop="name" :label="t('common.name')" />
-      <el-table-column prop="description" :label="t('common.description')" />
+      <el-table-column prop="name" :label="t('common.name')" min-width="160" />
+      <el-table-column prop="description" :label="t('common.description')" min-width="320" />
       <el-table-column :label="t('common.status')" width="100">
         <template #default="{ row }">
           <el-switch
@@ -456,12 +477,12 @@ watch(
       <el-form :model="appForm">
         <el-form-item v-if="appDialogMode === 'detail' && currentApp" :label="t('common.name')">
           <div class="app-name-row">
-            <el-input v-model="appForm.name" :class="{ 'dirty-input': isAppNameDirty }" />
+            <el-input v-model="appForm.name" :maxlength="appNameMaxLength" :class="{ 'dirty-input': isAppNameDirty }" />
             <span class="app-id-text">{{ t('common.id') }}: {{ currentApp.id }}</span>
           </div>
         </el-form-item>
         <el-form-item v-else :label="t('common.name')">
-          <el-input v-model="appForm.name" />
+          <el-input v-model="appForm.name" :maxlength="appNameMaxLength" />
         </el-form-item>
         <el-form-item :label="t('common.description')">
           <el-input v-model="appForm.description" :class="{ 'dirty-input': isAppDescriptionDirty }" />
@@ -489,7 +510,7 @@ watch(
     <el-dialog v-model="expDialogVisible" :title="t('list.experimentCreateTitle')">
       <el-form :model="expForm">
         <el-form-item :label="t('common.name')">
-          <el-input v-model="expForm.name" />
+          <el-input v-model="expForm.name" :maxlength="experimentNameMaxLength" />
         </el-form-item>
         <el-form-item :label="t('common.description')">
           <el-input v-model="expForm.description" />

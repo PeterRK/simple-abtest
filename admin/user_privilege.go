@@ -181,12 +181,16 @@ func userCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	if !getJsonArgs(ctx, w, r, req) {
 		return
 	}
+	if !validName(req.Name, maxUserNameLen) {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 	if len(predefinedSecret) != 0 && req.Secret != predefinedSecret {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 	ctx.Debugf("request name=%q", req.Name)
-	if len(req.Name) == 0 || len(req.Password) == 0 {
+	if len(req.Password) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -233,8 +237,12 @@ func userLogin(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	if !getJsonArgs(ctx, w, r, req) {
 		return
 	}
+	if !validName(req.Name, maxUserNameLen) {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 	ctx.Debugf("request name=%q", req.Name)
-	if len(req.Name) == 0 || len(req.Password) == 0 {
+	if len(req.Password) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -425,7 +433,7 @@ func appGrantPrivilege(w http.ResponseWriter, r *http.Request, p httprouter.Para
 	if !getJsonArgs(ctx, w, r, req) {
 		return
 	}
-	if len(req.Name) == 0 ||
+	if !validName(req.Name, maxUserNameLen) ||
 		req.Privilege < int(privilegeNoAccess) || req.Privilege > int(privilegeAdmin) {
 		w.WriteHeader(http.StatusBadRequest)
 		return

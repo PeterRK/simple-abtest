@@ -5,6 +5,7 @@ import { saveSession, useAuth } from '@/auth'
 import { ElMessage } from 'element-plus'
 import { useI18n, type Locale } from '@/i18n'
 import { isStrongPassword } from '@/utils/password'
+import { getNameMaxLength, validateName } from '@/utils/name'
 import { useRouter } from 'vue-router'
 
 const { authDialogVisible } = useAuth()
@@ -13,6 +14,7 @@ const mode = ref<'login' | 'register'>('login')
 const loading = ref(false)
 const form = ref({ name: '', password: '', confirmPassword: '', secret: '' })
 const { t, locale, setLocale } = useI18n()
+const userNameMaxLength = getNameMaxLength('user')
 
 const handleLocaleChange = (nextLocale: string) => {
   setLocale(nextLocale as Locale)
@@ -23,7 +25,12 @@ const resetForm = () => {
 }
 
 const submit = async () => {
-  if (!form.value.name || !form.value.password) {
+  const nameValidation = validateName(form.value.name, 'user')
+  if (!nameValidation.valid) {
+    ElMessage.error(t(nameValidation.messageKey, { max: nameValidation.max }))
+    return
+  }
+  if (!form.value.password) {
     ElMessage.error(t('message.authRequired'))
     return
   }
@@ -41,7 +48,7 @@ const submit = async () => {
   }
   loading.value = true
   try {
-    const req = { name: form.value.name.trim(), password: form.value.password }
+    const req = { name: nameValidation.normalized, password: form.value.password }
     const res = mode.value === 'login'
       ? await loginUser(req)
       : await registerUser({ ...req, secret: form.value.secret.trim() })
@@ -98,7 +105,7 @@ const switchMode = () => {
     <div class="auth-tip">{{ t('auth.needLoginTip') }}</div>
     <el-form :model="form" @submit.prevent>
       <el-form-item :label="t('common.name')">
-        <el-input v-model="form.name" autocomplete="username" />
+        <el-input v-model="form.name" :maxlength="userNameMaxLength" autocomplete="username" />
       </el-form-item>
       <el-form-item :label="t('auth.password')">
         <el-input v-model="form.password" type="password" show-password autocomplete="current-password" @keyup.enter="submit" />

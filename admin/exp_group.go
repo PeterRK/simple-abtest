@@ -201,7 +201,7 @@ func grpCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	if !getJsonArgsWithLog(ctx, w, r, req) {
 		return
 	}
-	if len(req.Name) == 0 {
+	if !validName(req.Name, maxGroupNameLen) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -247,7 +247,7 @@ func grpUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	if !getJsonArgsWithLog(ctx, w, r, req) {
 		return
 	}
-	if len(req.Name) == 0 {
+	if !validName(req.Name, maxGroupNameLen) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}

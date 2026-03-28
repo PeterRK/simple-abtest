@@ -45,6 +45,15 @@ Rules in current implementation:
 ### Common Behavior
 
 - Optimistic locking: many mutating endpoints require `version`; mismatch returns `409 Conflict`.
+- Name validation:
+  - allowed characters: `A-Z`, `a-z`, `0-9`, `_`, `-`
+  - invalid or oversized names return `400 Bad Request`
+  - max length by resource:
+    - user name: `64`
+    - application name: `64`
+    - experiment name: `32`
+    - layer name: `32`
+    - group name: `32`
 - Common status codes:
   - `400 Bad Request`: invalid input
   - `401 Unauthorized`: missing/invalid session or invalid password credential
@@ -82,6 +91,7 @@ Response `200 OK`:
 Notes:
 
 - `secret` is an optional registration invite code / predefined secret.
+- `name` must match the common name validation rule, max length `64`.
 - when the server enables a predefined secret, invalid or missing `secret` may return `401 Unauthorized`
 - duplicate name -> `409 Conflict`
 
@@ -108,6 +118,7 @@ Response `200 OK`:
 
 Notes:
 
+- `name` must match the common name validation rule, max length `64`.
 - invalid user/password -> `401 Unauthorized`
 
 ### PUT `/api/user/:id`
@@ -188,6 +199,10 @@ Request:
 
 Response: `200 OK` empty body.
 
+Notes:
+
+- `name` must match the common name validation rule, max length `64`.
+
 ---
 
 ## Application
@@ -220,6 +235,7 @@ Response `200 OK`:
 
 Notes:
 
+- `name` must match the common name validation rule, max length `64`.
 - creator gets `admin` privilege on this app automatically.
 - server still generates and stores one app-level secret in `application.access_token`, but it is no longer returned by create/list/detail APIs.
 
@@ -286,6 +302,7 @@ Response: `200 OK` empty body.
 
 Notes:
 
+- `name` must match the common name validation rule, max length `64`.
 - current implementation updates `name` and `description` only.
 
 ### POST `/api/app/:id/token`
@@ -313,6 +330,10 @@ Response `200 OK`:
 
 Notes:
 
+- `name` must match the common name validation rule, max length `32`.
+
+Notes:
+
 - `ttl_seconds` must be positive.
 - if the derived `expire_at` cannot fit into the token's uint32 unix-seconds field, server returns `400 Bad Request`.
 - returned `token` is a short-lived public token signed from the app's stored `access_token`; it is not the stored secret itself.
@@ -332,6 +353,10 @@ Request:
 ```
 
 Response: `200 OK` empty body.
+
+Notes:
+
+- `name` must match the common name validation rule, max length `32`.
 
 Notes:
 
@@ -369,6 +394,10 @@ Response `200 OK`:
   "tags": ["layerA:control"]
 }
 ```
+
+Notes:
+
+- `name` must match the common name validation rule, max length `32`.
 
 Notes:
 
@@ -450,6 +479,10 @@ Request:
 
 Response: `200 OK` empty body.
 
+Notes:
+
+- `name` must match the common name validation rule, max length `32`.
+
 ### DELETE `/api/exp/:id`
 
 Permission: experiment `read-write`.
@@ -521,6 +554,10 @@ Response `200 OK`:
 }
 ```
 
+Notes:
+
+- `name` must match the common name validation rule, max length `32`.
+
 ### GET `/api/lyr/:id`
 
 Permission: layer `read-only`.
@@ -557,6 +594,10 @@ Request:
 ```
 
 Response: `200 OK` empty body.
+
+Notes:
+
+- `name` must match the common name validation rule, max length `32`.
 
 ### DELETE `/api/lyr/:id`
 

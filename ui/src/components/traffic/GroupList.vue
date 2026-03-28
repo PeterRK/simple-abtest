@@ -25,6 +25,7 @@
       <div class="group-detail-header">
         <el-input
           v-model="groupForm.name"
+          :maxlength="groupNameMaxLength"
           :placeholder="t('group.groupName')"
           :class="{ 'dirty-input': isGroupNameDirty }"
         />
@@ -76,7 +77,7 @@
     <el-dialog v-model="dialogVisible" :title="t('group.createTitle')" width="360px">
       <el-form :model="form" label-width="40px">
         <el-form-item :label="t('common.name')">
-          <el-input v-model="form.name" />
+          <el-input v-model="form.name" :maxlength="groupNameMaxLength" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -105,6 +106,7 @@ import { createGroup, updateGroup, deleteGroup, rebalanceSegment, getConfigs, cr
 import type { Segment, Group, Config } from '@/types'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from '@/i18n'
+import { getNameMaxLength, validateName } from '@/utils/name'
 
 const props = defineProps<{
   segment: Segment
@@ -269,6 +271,7 @@ watch(
 
 const dialogVisible = ref(false)
 const form = ref({ name: '' })
+const groupNameMaxLength = getNameMaxLength('group')
 
 const openGroupDialog = (type: 'create') => {
   if (type === 'create') {
@@ -282,12 +285,17 @@ const bumpSegmentVersion = () => {
 }
 
 const handleCreate = async () => {
+  const nameValidation = validateName(form.value.name, 'group')
+  if (!nameValidation.valid) {
+    ElMessage.error(t(nameValidation.messageKey, { max: nameValidation.max }))
+    return
+  }
   try {
     const segmentVersion = props.segment.version ?? 0
     const res = await createGroup({
       seg_id: props.segment.id,
       seg_ver: segmentVersion,
-      name: form.value.name
+      name: nameValidation.normalized
     })
     const nextGroup: Group = {
       ...res.data,
@@ -308,6 +316,11 @@ const handleCreate = async () => {
 
 const handleUpdate = async () => {
   if (!selectedGroupDetail.value) return
+  const nameValidation = validateName(groupForm.value.name, 'group')
+  if (!nameValidation.valid) {
+    ElMessage.error(t(nameValidation.messageKey, { max: nameValidation.max }))
+    return
+  }
   try {
     if (!isGroupDirty.value) return
     const forceHit = buildForceHitList(forceHitText.value)
@@ -327,14 +340,14 @@ const handleUpdate = async () => {
       nextConfigId = res.data.id
       nextConfigContent = nextContent
       await updateGroup(selectedGroupDetail.value.id, {
-        name: groupForm.value.name,
+        name: nameValidation.normalized,
         version: selectedGroupDetail.value.version,
         cfg_id: res.data.id,
         force_hit: forceHit
       })
     } else {
       await updateGroup(selectedGroupDetail.value.id, {
-        name: groupForm.value.name,
+        name: nameValidation.normalized,
         version: selectedGroupDetail.value.version,
         cfg_id: activeConfigId,
         force_hit: forceHit
@@ -346,7 +359,7 @@ const handleUpdate = async () => {
     const nextVersion = selectedGroupDetail.value.version + 1
     const nextGroupDetail: Group = {
       ...selectedGroupDetail.value,
-      name: groupForm.value.name,
+      name: nameValidation.normalized,
       cfg_id: nextConfigId,
       cfg_stamp: createdConfigId != null ? createdConfigStamp : selectedGroupDetail.value.cfg_stamp,
       force_hit: forceHit,

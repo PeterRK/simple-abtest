@@ -173,7 +173,7 @@ func expCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	if !getJsonArgsWithLog(ctx, w, r, req) {
 		return
 	}
-	if len(req.Name) == 0 {
+	if !validName(req.Name, maxExpNameLen) || !validName(req.Name, maxLayerNameLen) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -224,7 +224,7 @@ func expUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	if !getJsonArgsWithLog(ctx, w, r, req) {
 		return
 	}
-	if len(req.Name) == 0 {
+	if !validName(req.Name, maxExpNameLen) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}

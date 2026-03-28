@@ -147,7 +147,7 @@ func lyrCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	if !getJsonArgsWithLog(ctx, w, r, req) {
 		return
 	}
-	if len(req.Name) == 0 {
+	if !validName(req.Name, maxLayerNameLen) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -187,7 +187,7 @@ func lyrUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	if !getJsonArgsWithLog(ctx, w, r, req) {
 		return
 	}
-	if len(req.Name) == 0 {
+	if !validName(req.Name, maxLayerNameLen) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}

@@ -12,13 +12,13 @@ import (
 )
 
 var appSql struct {
-	getList *sql.Stmt
-	getOne  *sql.Stmt
+	getList  *sql.Stmt
+	getOne   *sql.Stmt
 	getToken *sql.Stmt
-	create  *sql.Stmt
-	update  *sql.Stmt
-	remove  *sql.Stmt
-	touch   *sql.Stmt
+	create   *sql.Stmt
+	update   *sql.Stmt
+	remove   *sql.Stmt
+	touch    *sql.Stmt
 }
 
 func prepareAppSql(db *sql.DB) (err error) {
@@ -178,7 +178,7 @@ func appCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	if !getJsonArgsWithLog(ctx, w, r, req) {
 		return
 	}
-	if len(req.Name) == 0 {
+	if !validName(req.Name, maxAppNameLen) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -274,7 +274,7 @@ func appUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	if !getJsonArgsWithLog(ctx, w, r, req) {
 		return
 	}
-	if len(req.Name) == 0 {
+	if !validName(req.Name, maxAppNameLen) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
