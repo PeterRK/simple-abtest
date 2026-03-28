@@ -632,7 +632,7 @@ const configRowClassName = ({ row }: { row: Config }) => {
   gap: 10px;
 }
 .group-detail-header :deep(.el-input) {
-  width: 220px;
+  width: 160px;
 }
 .group-detail-actions {
   margin-left: auto;

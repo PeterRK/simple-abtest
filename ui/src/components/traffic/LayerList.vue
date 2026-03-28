@@ -367,7 +367,7 @@ watch(
   gap: 10px;
 }
 .layer-meta :deep(.el-input) {
-  width: 220px;
+  width: 160px;
 }
 .layer-meta-right {
   margin-left: auto;

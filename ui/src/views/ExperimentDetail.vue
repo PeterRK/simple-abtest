@@ -284,11 +284,13 @@ onMounted(() => {
           v-model="experiment.name"
           :maxlength="experimentNameMaxLength"
           :placeholder="t('detail.expName')"
+          class="exp-name-input"
           :class="{ 'dirty-input': isExperimentNameDirty }"
         />
         <el-input
           v-model="experiment.description"
           :placeholder="t('detail.expDesc')"
+          class="exp-desc-input"
           :class="{ 'dirty-input': isExperimentDescriptionDirty }"
         />
         <el-button type="primary" :disabled="!isExperimentDirty" @click="handleUpdate">{{ t('common.update') }}</el-button>
@@ -364,6 +366,12 @@ onMounted(() => {
   gap: 12px;
 }
 .exp-row :deep(.el-input) {
+  flex: 0 0 auto;
+}
+.exp-row :deep(.exp-name-input.el-input) {
+  width: 160px;
+}
+.exp-row :deep(.exp-desc-input.el-input) {
   width: 240px;
 }
 .exp-row-right {
