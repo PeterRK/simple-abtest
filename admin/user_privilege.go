@@ -190,9 +190,6 @@ func userCreate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	if !requireRateLimit(ctx, w, r, loginRateLimitByIP, getRequestAddr(r)) {
-		return
-	}
 
 	salt := make([]byte, 16)
 	if _, err := rand.Read(salt); err != nil {
@@ -241,9 +238,6 @@ func userLogin(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	if !requireRateLimit(ctx, w, r, loginRateLimitByIP, getRequestAddr(r)) {
-		return
-	}
 	if !requireRateLimit(ctx, w, r, loginRateLimitByAccount, req.Name) {
 		return
 	}
@@ -288,9 +282,6 @@ func userUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	ctx := NewContext(r.Context(), "userUpdate")
 	target, ok := parseUintParam(w, p, "id")
 	if !ok {
-		return
-	}
-	if !requireRateLimit(ctx, w, r, updateRateLimitByIP, getRequestAddr(r)) {
 		return
 	}
 	if !requireRateLimit(ctx, w, r, updateRateLimitByUser, strconv.FormatUint(uint64(target), 10)) {
@@ -338,9 +329,6 @@ func userDelete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	ctx := NewContext(r.Context(), "userDelete")
 	target, ok := parseUintParam(w, p, "id")
 	if !ok {
-		return
-	}
-	if !requireRateLimit(ctx, w, r, deleteRateLimitByIP, getRequestAddr(r)) {
 		return
 	}
 	if !requireRateLimit(ctx, w, r, deleteRateLimitByUser, strconv.FormatUint(uint64(target), 10)) {

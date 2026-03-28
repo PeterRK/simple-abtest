@@ -75,6 +75,8 @@ func (c *Client) update() error {
 		return err
 	}
 
+	// A slice header is also a small descriptor that points to the backing array.
+	// Refresh decodes into a fresh slice and then swaps the whole descriptor.
 	c.dataPtr = ptr
 	c.stamp = uint32(time.Now().Unix())
 	return nil

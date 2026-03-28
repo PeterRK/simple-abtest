@@ -174,6 +174,8 @@ type Application struct {
 }
 
 var (
+	// map is a descriptor over runtime-managed storage rather than an inline container.
+	// Refresh always rebuilds a brand-new map and replaces the whole value at once.
 	applications map[uint32]*Application
 )
 
