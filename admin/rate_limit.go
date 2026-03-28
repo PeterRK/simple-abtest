@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/peterrk/simple-abtest/utils"
 )
 
 type rateLimitRule struct {
@@ -50,14 +52,10 @@ func normalizeRateLimitScope(scope string) string {
 
 func checkRateLimit(ctx *Context, rule rateLimitRule, scope string) (bool, error) {
 	key := rateLimitKey(rule, normalizeRateLimitScope(scope))
-	n, err := rds.Incr(ctx, key).Result()
+	ttl := int64(rule.window / time.Second)
+	n, err := utils.IncrWithTTL(ctx, rds, key, ttl)
 	if err != nil {
 		return false, err
-	}
-	if n == 1 {
-		if err := rds.Expire(ctx, key, rule.window).Err(); err != nil {
-			return false, err
-		}
 	}
 	return n <= rule.limit, nil
 }

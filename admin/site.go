@@ -27,12 +27,11 @@ func bindSiteOp(router *httprouter.Router) error {
 
 func handleEngineProxy(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	ctx := NewContext(r.Context(), "engineProxy")
+	defer r.Body.Close()
 	uid, ok := verifySession(ctx, w, r)
 	if !ok {
 		return
 	}
-
-	defer r.Body.Close()
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
 		ctx.Errorf("fail to read engine proxy body: %v", err)

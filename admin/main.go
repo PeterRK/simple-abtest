@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
-	"net/http/pprof"
 	"os"
 	"time"
 
@@ -107,14 +106,6 @@ func Main() int {
 	if err := bindSiteOp(router); err != nil {
 		fmt.Printf("fail to prepare site routes: %v\n", err)
 		return 1
-	}
-
-	if config.Test {
-		router.HandlerFunc(http.MethodGet, "/debug/pprof/", pprof.Index)
-		router.HandlerFunc(http.MethodGet, "/debug/pprof/cmdline", pprof.Cmdline)
-		router.HandlerFunc(http.MethodGet, "/debug/pprof/profile", pprof.Profile)
-		router.HandlerFunc(http.MethodGet, "/debug/pprof/symbol", pprof.Symbol)
-		router.HandlerFunc(http.MethodGet, "/debug/pprof/trace", pprof.Trace)
 	}
 
 	utils.GetLogger().Info("Server Up")

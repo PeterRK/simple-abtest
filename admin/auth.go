@@ -252,7 +252,7 @@ func buildSessionCookie(r *http.Request, name, value string) *http.Cookie {
 		Value:    value,
 		Path:     "/",
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteStrictMode,
 		Secure:   isSecureRequest(r),
 		MaxAge:   int(sessionTTL / time.Second),
 	}
