@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue'
-import { getApps, createApp, updateApp, deleteApp, getApp, createExp, switchExp, issueAppToken } from '@/api'
+import { getApps, createApp, updateApp, deleteApp, getApp, createExp, switchExp, issueAppToken, getAppPrivileges, grantAppPrivilege } from '@/api'
 import type { Application, Experiment } from '@/types'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
@@ -45,8 +45,14 @@ const tokenForm = ref({ ttlDays: 1 })
 const tokenLoading = ref(false)
 const issuedToken = ref('')
 const issuedTokenExpireAt = ref('')
+const privilegeDialogVisible = ref(false)
+const privilegeLoading = ref(false)
+const privileges = ref<{ name: string; privilege: number; grantor: string }[]>([])
+const privilegeForm = ref({ name: '', privilege: 1 })
 const appNameMaxLength = getNameMaxLength('app')
 const experimentNameMaxLength = getNameMaxLength('experiment')
+const userNameMaxLength = getNameMaxLength('user')
+const privilegeAppId = computed(() => currentApp.value?.id || selectedAppId.value || null)
 
 const isAppNameDirty = computed(() => {
   if (appDialogMode.value !== 'detail' || !currentApp.value) return false
@@ -207,6 +213,64 @@ const showTokenDialog = () => {
   issuedTokenExpireAt.value = ''
   tokenForm.value.ttlDays = 1
   tokenDialogVisible.value = true
+}
+
+const privilegeLabel = (privilege: number) => {
+  if (privilege === 1) return t('privilege.read')
+  if (privilege === 2) return t('privilege.write')
+  if (privilege === 3) return t('privilege.admin')
+  return t('privilege.none')
+}
+
+const loadPrivileges = async () => {
+  if (!privilegeAppId.value) return
+  privilegeLoading.value = true
+  try {
+    const res = await getAppPrivileges(privilegeAppId.value)
+    privileges.value = res.data || []
+  } catch (e) {
+    ElMessage.error(t('message.failedLoadPrivileges'))
+  } finally {
+    privilegeLoading.value = false
+  }
+}
+
+const showPrivilegeDialog = async () => {
+  if (!privilegeAppId.value) return
+  privilegeForm.value = { name: '', privilege: 1 }
+  privilegeDialogVisible.value = true
+  await loadPrivileges()
+}
+
+const submitPrivilege = async () => {
+  if (!privilegeAppId.value) return
+  const nameValidation = validateName(privilegeForm.value.name, 'user')
+  if (!nameValidation.valid) {
+    ElMessage.error(t(nameValidation.messageKey, { max: nameValidation.max }))
+    return
+  }
+  try {
+    await grantAppPrivilege(privilegeAppId.value, {
+      name: nameValidation.normalized,
+      privilege: privilegeForm.value.privilege
+    })
+    ElMessage.success(t('message.privilegeUpdated'))
+    privilegeForm.value = { name: '', privilege: 1 }
+    await loadPrivileges()
+  } catch (e) {
+    ElMessage.error(t('message.operationFailed'))
+  }
+}
+
+const revokePrivilege = async (name: string) => {
+  if (!privilegeAppId.value) return
+  try {
+    await grantAppPrivilege(privilegeAppId.value, { name, privilege: 0 })
+    ElMessage.success(t('message.privilegeUpdated'))
+    await loadPrivileges()
+  } catch (e) {
+    ElMessage.error(t('message.operationFailed'))
+  }
 }
 
 const handleIssueToken = async () => {
@@ -437,12 +501,15 @@ watch(
         <el-select v-model="selectedAppId" :placeholder="t('list.selectApp')" @change="handleAppChange" style="width: 200px">
           <el-option v-for="app in apps" :key="app.id" :label="`${app.name} (${app.id})`" :value="app.id" />
         </el-select>
-        <el-button-group class="ml-2">
-            <el-button @click="showCreateApp">{{ t('common.create') }}</el-button>
-            <el-tooltip :content="t('list.selectAppFirst')" :disabled="!!selectedAppId" placement="top">
-              <span><el-button :disabled="!selectedAppId" @click="showAppDetail">{{ t('common.detail') }}</el-button></span>
-            </el-tooltip>
-        </el-button-group>
+        <div class="toolbar-app-actions ml-2">
+          <el-button @click="showCreateApp">{{ t('common.create') }}</el-button>
+          <el-tooltip :content="t('list.selectAppFirst')" :disabled="!!selectedAppId" placement="top">
+            <span><el-button :disabled="!selectedAppId" @click="showAppDetail">{{ t('common.detail') }}</el-button></span>
+          </el-tooltip>
+          <el-tooltip :content="t('list.selectAppFirst')" :disabled="!!selectedAppId" placement="top">
+            <span><el-button :disabled="!selectedAppId" @click="showPrivilegeDialog">{{ t('detail.appPrivilege') }}</el-button></span>
+          </el-tooltip>
+        </div>
       </div>
       <div class="right">
         <el-tooltip :content="t('list.selectAppFirst')" :disabled="!!selectedAppId" placement="top">
@@ -541,6 +608,39 @@ watch(
         <el-button type="primary" :loading="tokenLoading" @click="handleIssueToken">{{ t('token.issue') }}</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="privilegeDialogVisible" :title="t('detail.privilegeTitle')" width="680px">
+      <el-form :inline="true" :model="privilegeForm" class="privilege-form">
+        <el-form-item :label="t('detail.targetUser')">
+          <el-input v-model="privilegeForm.name" :maxlength="userNameMaxLength" />
+        </el-form-item>
+        <el-form-item :label="t('detail.privilegeLevel')">
+          <el-select v-model="privilegeForm.privilege" style="width: 120px">
+            <el-option :label="t('privilege.read')" :value="1" />
+            <el-option :label="t('privilege.write')" :value="2" />
+            <el-option :label="t('privilege.admin')" :value="3" />
+          </el-select>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="submitPrivilege">{{ t('common.confirm') }}</el-button>
+        </el-form-item>
+      </el-form>
+
+      <el-table :data="privileges" v-loading="privilegeLoading" style="width: 100%">
+        <el-table-column prop="name" :label="t('common.name')" />
+        <el-table-column :label="t('detail.privilegeLevel')">
+          <template #default="{ row }">
+            {{ privilegeLabel(row.privilege) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="grantor" :label="t('detail.grantor')" />
+        <el-table-column :label="t('common.operation')" width="120">
+          <template #default="{ row }">
+            <el-button link type="danger" @click="revokePrivilege(row.name)">{{ t('detail.revoke') }}</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
   </div>
 </template>
 
@@ -548,10 +648,20 @@ watch(
 .toolbar {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   margin-bottom: 20px;
+}
+.left {
+  display: flex;
+  align-items: center;
 }
 .ml-2 {
     margin-left: 10px;
+}
+.toolbar-app-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .app-name-row {
   width: 100%;
@@ -586,6 +696,9 @@ watch(
   line-height: 1.6;
   word-break: break-all;
   color: #c45656;
+}
+.privilege-form {
+  margin-bottom: 12px;
 }
 :deep(.clickable-row) {
     cursor: pointer;
