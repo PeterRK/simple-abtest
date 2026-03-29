@@ -110,7 +110,9 @@ func Main() int {
 		failing := false
 		for ctx.Err() == nil {
 			time.Sleep(time.Second * time.Duration(config.IntervalS))
-
+			if ctx.Err() != nil {
+				return
+			}
 			apps, err := fetch()
 			if err != nil {
 				failing = true

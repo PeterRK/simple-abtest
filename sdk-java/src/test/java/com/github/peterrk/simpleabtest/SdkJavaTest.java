@@ -18,6 +18,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SdkJavaTest {
@@ -193,6 +195,55 @@ class SdkJavaTest {
         assertEquals(List.of("L1:G1"), decision.tags());
     }
 
+    @Test
+    void clientWrapsInvalidJsonAsIoException() throws Exception {
+        OkHttpClient httpClient = new OkHttpClient.Builder()
+                .addInterceptor(new StaticResponseInterceptor("{", false))
+                .build();
+        IOException error = assertThrows(IOException.class,
+                () -> Client.create("http://unit.test", 1, "token", 0, httpClient));
+        assertEquals("invalid experiment payload", error.getMessage());
+        assertInstanceOf(com.google.gson.JsonSyntaxException.class, error.getCause());
+    }
+
+    @Test
+    void refreshWrapsInvalidBitmapAsIoException() throws Exception {
+        String validPayload = """
+                [
+                  {
+                    "lyr": [{
+                      "name": "L1",
+                      "seg": [{
+                        "seed": 1,
+                        "grp": [{"name": "G1", "bm": "%s", "cfg": "cfg1"}]
+                      }]
+                    }]
+                  }
+                ]
+                """.formatted(fullBitmapBase64());
+        String invalidPayload = """
+                [
+                  {
+                    "lyr": [{
+                      "name": "L1",
+                      "seg": [{
+                        "seed": 1,
+                        "grp": [{"name": "G1", "bm": "!!!", "cfg": "cfg1"}]
+                      }]
+                    }]
+                  }
+                ]
+                """;
+        OkHttpClient httpClient = new OkHttpClient.Builder()
+                .addInterceptor(new SequenceResponseInterceptor(validPayload, invalidPayload))
+                .build();
+        try (Client client = Client.create("http://unit.test", 1, "token", 0, httpClient)) {
+            IOException error = assertThrows(IOException.class, client::refresh);
+            assertEquals("invalid experiment payload", error.getMessage());
+            assertInstanceOf(IllegalArgumentException.class, error.getCause());
+        }
+    }
+
     private static String findKey(long seed, long begin, long end) {
         for (int i = 0; i < 10000; i++) {
             String key = "k" + i;
@@ -257,6 +308,33 @@ class SdkJavaTest {
                 builder.header("Content-Encoding", "gzip");
             }
             return builder.build();
+        }
+    }
+
+    private static final class SequenceResponseInterceptor implements Interceptor {
+        private final byte[][] bodies;
+        private int index;
+
+        SequenceResponseInterceptor(String... payloads) {
+            this.bodies = new byte[payloads.length][];
+            for (int i = 0; i < payloads.length; i++) {
+                this.bodies[i] = payloads[i].getBytes();
+            }
+        }
+
+        @Override
+        public Response intercept(Chain chain) {
+            Request request = chain.request();
+            byte[] body = bodies[Math.min(index, bodies.length - 1)];
+            index++;
+            return new Response.Builder()
+                    .request(request)
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(200)
+                    .message("OK")
+                    .body(ResponseBody.create(body, MediaType.get("application/json")))
+                    .header("Content-Type", "application/json")
+                    .build();
         }
     }
 }

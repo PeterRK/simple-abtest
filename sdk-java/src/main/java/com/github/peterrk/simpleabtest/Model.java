@@ -43,8 +43,8 @@ final class Model {
         @SerializedName("grp")
         List<Group> groups = List.of();
 
-        Group locate(String key) {
-            long slot = Long.remainderUnsigned(Hash.hash(seed, key.getBytes(StandardCharsets.UTF_8)), 1000L);
+        Group locate(byte[] keyBytes) {
+            long slot = Long.remainderUnsigned(Hash.hash(seed, keyBytes), 1000L);
             int block = (int) (slot >> 3);
             int mask = 1 << (slot & 7);
             for (Group group : groups) {
@@ -144,6 +144,7 @@ final class Model {
     }
 
     static Decision getExpConfig(List<Experiment> exps, String key, Map<String, String> ctx) {
+        byte[] keyBytes = key.getBytes(StandardCharsets.UTF_8);
         HashMap<String, String> config = new HashMap<>();
         ArrayList<String> tags = new ArrayList<>();
         for (Experiment exp : exps) {
@@ -154,7 +155,7 @@ final class Model {
                 Layer layer = exp.layers.getFirst();
                 Group group = forceHit(layer, key);
                 if (group == null) {
-                    group = layer.segments.getFirst().locate(key);
+                    group = layer.segments.getFirst().locate(keyBytes);
                 }
                 if (group != null) {
                     mark(config, tags, layer, group);
@@ -162,7 +163,7 @@ final class Model {
                 continue;
             }
 
-            long slot = Long.remainderUnsigned(Hash.hash(exp.seed, key.getBytes(StandardCharsets.UTF_8)), 100L);
+            long slot = Long.remainderUnsigned(Hash.hash(exp.seed, keyBytes), 100L);
             for (Layer layer : exp.layers) {
                 Group group = forceHit(layer, key);
                 if (group != null) {
@@ -171,7 +172,7 @@ final class Model {
                 }
                 for (Segment seg : layer.segments) {
                     if (seg.range.begin <= slot && slot < seg.range.end) {
-                        group = seg.locate(key);
+                        group = seg.locate(keyBytes);
                         if (group != null) {
                             mark(config, tags, layer, group);
                         }

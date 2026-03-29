@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.zip.GZIPInputStream;
+import com.google.gson.JsonParseException;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -64,7 +65,12 @@ public final class Client implements AutoCloseable {
             if (!response.isSuccessful()) {
                 throw new IOException("fetch app info failed: status=" + response.code());
             }
-            data = Model.parseExperiments(decodeBody(response));
+            String payload = decodeBody(response);
+            try {
+                data = Model.parseExperiments(payload);
+            } catch (IllegalArgumentException | JsonParseException ex) {
+                throw new IOException("invalid experiment payload", ex);
+            }
         }
         stamp = Instant.now().getEpochSecond();
     }
