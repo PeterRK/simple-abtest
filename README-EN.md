@@ -8,10 +8,10 @@
 
 - Experiment management: organize experiments by application, with support for creating, editing, enabling, disabling, and deleting experiments.
 - Access control: supports multi-user login and per-application roles, including read-only, read-write, and administrator.
-- Conditional targeting: define matching conditions based on business context so that only eligible requests enter an experiment.
-- Online verification: enter a key and context to inspect the evaluation result for easier debugging.
+- Conditional targeting: define filter conditions based on business context so that only eligible requests enter an experiment.
+- Traffic Check: enter a key and context to inspect the hit result for easier debugging.
 - Forced targeting: route a specific key to a designated variant for testing and validation.
-- Advanced experiment flow: supports two-stage traffic allocation, multi-layer traffic pass-through, traffic slot rotation between groups, and configuration rollback for long-running experiments.
+- Advanced experiment flow: supports two-stage traffic allocation, multi-layer traffic pass-through, group traffic rotation, and configuration rollback for long-running experiments.
 - Flexible integration: use online APIs for real-time decisions or local SDKs to reduce request overhead.
 
 ## Admin Console
@@ -19,11 +19,12 @@
 ![](images/list-en.png)
 ### Detail Page
 ![](images/detail-en.png)
-### Verification Page
+### Traffic Check Page
 ![](images/verify-en.png)
 ### Notes
-- The admin console currently does not enforce exclusivity checks for naming or forced targeting. If conflicts occur, behavior is undefined, so please avoid overlapping configurations.
+- The admin console currently does not enforce exclusivity checks for naming or forced-targeting rules. If conflicts occur, behavior is undefined, so please avoid overlapping configurations.
 - To mitigate traffic polarization in long-running experiments, when traffic is adjusted for a non-default group, its traffic slots are rotated with the default group while keeping the current traffic ratio unchanged. Because of this behavior, the default group is not always suitable as the control group, and a separate control group may be preferable.
+- Traffic Check calls the traffic allocation service directly, so changes made in the admin console take time to propagate there as well.
 - Data visualization is not implemented yet. Use the generated traffic tags in your existing analytics or visualization platform.
 
 ## Service Components
@@ -42,7 +43,7 @@ Client ->- -> Engine
 
 ### Online Allocation
 
-Your application sends requests to `engine` and receives the matched configuration and tags. The verification page in the admin console uses the same path, so it has the same propagation delay.
+Your application sends requests to `engine` and receives the matched configuration and tags. The Traffic Check page in the admin console uses the same path, so it has the same propagation delay.
 
 ```http
 POST /

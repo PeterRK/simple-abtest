@@ -8,8 +8,8 @@
 
 - Experimentverwaltung pro Anwendung: Eine Anwendung kann mehrere Experimente mit Name, Beschreibung, Status und Eintrittsfilter besitzen.
 - Rechteverwaltung pro Anwendung: Mehrere Benutzer mit Rollen fur Lesen, Bearbeiten oder Administration.
-- Kontextbasiertes Targeting: Ein Experimentfilter entscheidet anhand des Request-Kontexts, wer in das Experiment aufgenommen wird.
-- Online-Validierung: In der Konsole lassen sich `key` und `context` eingeben, um die tatsachliche Entscheidung des Motors zu prufen.
+- Kontextbasiertes Targeting: Definieren Sie Filterbedingungen anhand des fachlichen Kontexts, damit nur passende Requests in ein Experiment gelangen.
+- Validierung: In der Konsole lassen sich `key` und `context` eingeben, um das tatsachliche Ergebnis des Dienstes zu prufen.
 - Forced hit pro Schlussel: Ein bestimmter `key` kann fest auf eine Gruppe gelenkt werden, etwa fur QA, Abnahme oder Reproduktion.
 - Mehrschichtige Experimente: Ein Experiment kann mehrere `layers` enthalten; jede Layer liefert ihre eigene Konfigurationsausgabe.
 - Traffic-Ausrichtung uber Layers hinweg: `segments` stehen fur gemeinsam genutzte Traffic-Bereiche zwischen Layers, nicht fur fachliche Varianten.
@@ -21,11 +21,12 @@
 ![](images/list-en.png)
 ### Detail
 ![](images/detail-en.png)
-### Validierung
+### Validierungsseite
 ![](images/verify-en.png)
 ### Hinweise
 - Die Konsole erzwingt derzeit keine Exklusivitatsprufung fur Namen oder `force_hit`. Bei Kollisionen kann das Verhalten mehrdeutig werden; uberschneidende Einstellungen sollten vermieden werden.
 - Um Traffic-Polarisierung in Langzeitexperimenten zu reduzieren, werden beim Anpassen eines nicht standardmassigen Gruppenanteils Buckets mit der Default-Gruppe rotiert, ohne das aktuelle Verhaltnis sofort zu verandern. Deshalb ist die Default-Gruppe nicht immer die beste Kontrollgruppe.
+- Die Validierung ruft den Entscheidungsdienst direkt auf. Anderungen aus der Konsole werden dort daher ebenfalls erst mit Verzogerung sichtbar.
 - Eine eingebaute Ergebnisvisualisierung gibt es noch nicht. Die vom Motor gelieferten Tags sind fur die Weiterverarbeitung in vorhandenen Analytics- oder Observability-Systemen gedacht.
 
 ## Komponenten

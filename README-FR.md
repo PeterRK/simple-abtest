@@ -8,8 +8,8 @@
 
 - Gestion des expériences par application : chaque application peut porter plusieurs expériences avec nom, description, état et filtre d’entrée.
 - Gestion des autorisations : plusieurs utilisateurs, avec droits lecture seule, lecture-écriture ou administration par application.
-- Ciblage contextuel : le filtre d’une expérience décide si une requête entre ou non dans le flux d’expérimentation.
-- Validation online : la console permet de soumettre un `key` et un `context` pour voir la configuration et les tags réellement renvoyés par le moteur.
+- Ciblage contextuel : définissez des conditions de filtre à partir du contexte métier afin que seules les requêtes éligibles entrent dans une expérience.
+- Validation : la console permet de soumettre un `key` et un `context` pour voir le résultat réellement renvoyé par le moteur.
 - Forced hit par clé : un `key` précis peut être forcé vers un groupe donné pour QA, validation ciblée ou reproduction.
 - Expériences multi-layers : une expérience peut exposer plusieurs `layers`, chacune produisant sa propre sortie de configuration.
 - Alignement du trafic entre layers : les `segments` décrivent des plages de trafic partagées entre layers, et non des variantes métier.
@@ -21,11 +21,12 @@
 ![](images/list-en.png)
 ### Détail
 ![](images/detail-en.png)
-### Validation
+### Page de validation
 ![](images/verify-en.png)
 ### Notes
 - La console ne vérifie pas encore l’exclusivité des noms ni des entrées `force_hit`. En cas de conflit, le comportement peut devenir ambigu; mieux vaut éviter les recouvrements.
 - Pour limiter la polarisation du trafic dans les expériences longues, lorsqu’on ajuste la part d’un groupe non par défaut, le système fait tourner des buckets avec le groupe par défaut sans modifier le pourcentage observé à l’instant T. Le groupe par défaut n’est donc pas toujours un bon groupe de contrôle.
+- La validation appelle directement le service de décision; les changements effectués dans la console mettent donc aussi un certain temps à s’y refléter.
 - La visualisation des résultats n’est pas encore intégrée. Les tags retournés par le moteur sont prévus pour être exploités dans votre stack analytique.
 
 ## Composants
