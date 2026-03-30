@@ -28,8 +28,6 @@ func Main() int {
 	flag.StringVar(&cfgPath, "config", "config.yaml", "config file")
 	flag.StringVar(&logPath, "log", "", "log file path")
 	flag.StringVar(&uiResourceDir, "ui-resource", "ui", "ui resource dir")
-	flag.StringVar(&engineUrl, "engine", "http://127.0.0.1:8080", "engine url")
-	flag.StringVar(&predefinedSecret, "secret", "", "predefined secret")
 	flag.Parse()
 
 	config := struct {
@@ -41,12 +39,19 @@ func Main() int {
 		Database    string            `yaml:"db"`
 		Redis       utils.RedisConfig `yaml:"redis"`
 		RedisPrefix string            `yaml:"redis_prefix"`
+		Secret      string            `yaml:"secret"`
+		Engine      string            `yaml:"engine"`
 	}{}
 
 	err := utils.LoadYamlFile(cfgPath, &config)
 	if err != nil {
 		fmt.Printf("fail to load server config: %v\n", err)
 		return 1
+	}
+	predefinedSecret = config.Secret
+	engineUrl = config.Engine
+	if len(engineUrl) == 0 {
+		engineUrl = "http://127.0.0.1:8080"
 	}
 
 	if len(config.Redis.Address) == 0 {

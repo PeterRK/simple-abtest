@@ -142,6 +142,8 @@ redis:
   pool_size: 10
   idle_size: 2
 redis_prefix: "sab-"
+secret: ""
+engine: "http://127.0.0.1:8080"
 test: false
 ```
 
@@ -150,6 +152,8 @@ test: false
 - `db`：MySQL连接串，`admin`和`engine`都会使用。
 - `redis.address`：Redis 地址，管理端用于会话和权限缓存。
 - `redis_prefix`：建议为当前环境设置独立前缀，避免和其他环境混用。
+- `secret`：可选的预置签名密钥。留空时由系统按现有逻辑处理。
+- `engine`：`admin` 代理在线验证等请求时访问的引擎地址；留空时默认使用 `http://127.0.0.1:8080`。
 - `test`：设为 `true` 时会打开更详细的调试能力，不建议生产环境开启。
 
 `engine/config.yaml`
@@ -178,6 +182,6 @@ interval_s: 300
 启动服务时建议直接使用构建后的二进制：
 
 ```bash
-./bin/admin -config admin/config.yaml -port 8001 -ui-resource ./ui/dist -engine http://127.0.0.1:8080
+./bin/admin -config admin/config.yaml -port 8001 -ui-resource ./ui/dist
 ./bin/engine -config engine/config.yaml -port 8080
 ```

@@ -219,7 +219,7 @@ const messages: Record<Locale, MessageTree> = {
     verify: {
       title: '在线验流',
       application: '应用',
-      key: '分流Key',
+      key: 'Key',
       context: '上下文',
       contextKey: '字段名',
       contextValue: '字段值',

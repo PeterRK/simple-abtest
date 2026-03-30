@@ -144,6 +144,8 @@ redis:
   pool_size: 10
   idle_size: 2
 redis_prefix: "sab-"
+secret: ""
+engine: "http://127.0.0.1:8080"
 test: false
 ```
 
@@ -152,6 +154,8 @@ Hinweise:
 - `db`: gemeinsame MySQL-Verbindungszeichenfolge fur `admin` und `engine`.
 - `redis.address`: Redis-Instanz fur Sessions und Berechtigungs-Cache der Konsole.
 - `redis_prefix`: Es empfiehlt sich ein eigener Prefix je Umgebung, um Kollisionen zu vermeiden.
+- `secret`: optionales vordefiniertes Signatur-Secret. Leer lassen, um das bisherige Standardverhalten beizubehalten.
+- `engine`: Basis-URL von `engine`, die `admin` fur Online-Verifikation und ahnliche Proxy-Anfragen verwendet. Leer bedeutet Standardwert `http://127.0.0.1:8080`.
 - `test`: Mit `true` werden zusatzliche Debug-Funktionen freigeschaltet; fur Produktion nicht empfohlen.
 
 `engine/config.yaml`
@@ -180,6 +184,6 @@ Das Skript pruft die lokale Go- und Node.js/npm-Umgebung und erzeugt anschliesse
 Fur den Start der Dienste empfiehlt es sich, die gebauten Binardateien direkt zu verwenden:
 
 ```bash
-./bin/admin -config admin/config.yaml -port 8001 -ui-resource ./ui/dist -engine http://127.0.0.1:8080
+./bin/admin -config admin/config.yaml -port 8001 -ui-resource ./ui/dist
 ./bin/engine -config engine/config.yaml -port 8080
 ```

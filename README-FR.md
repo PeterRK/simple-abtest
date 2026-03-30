@@ -144,6 +144,8 @@ redis:
   pool_size: 10
   idle_size: 2
 redis_prefix: "sab-"
+secret: ""
+engine: "http://127.0.0.1:8080"
 test: false
 ```
 
@@ -152,6 +154,8 @@ Notes :
 - `db` : chaîne de connexion MySQL partagée par `admin` et `engine`.
 - `redis.address` : instance Redis utilisée par la console pour les sessions et le cache d’autorisations.
 - `redis_prefix` : il est conseillé de définir un préfixe distinct par environnement.
+- `secret` : secret de signature prédéfini facultatif. Laissez-le vide pour conserver le comportement par défaut actuel.
+- `engine` : URL de base de `engine` utilisée par `admin` pour relayer les vérifications online et requêtes associées. Si elle est vide, la valeur par défaut est `http://127.0.0.1:8080`.
 - `test` : avec `true`, la plateforme active des capacités de débogage supplémentaires; cela n’est pas recommandé en production.
 
 `engine/config.yaml`
@@ -180,6 +184,6 @@ Le script vérifie la présence des environnements Go et Node.js/npm puis produi
 Pour lancer les services, il est recommandé d’utiliser directement les binaires compilés :
 
 ```bash
-./bin/admin -config admin/config.yaml -port 8001 -ui-resource ./ui/dist -engine http://127.0.0.1:8080
+./bin/admin -config admin/config.yaml -port 8001 -ui-resource ./ui/dist
 ./bin/engine -config engine/config.yaml -port 8080
 ```

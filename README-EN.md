@@ -142,6 +142,8 @@ redis:
   pool_size: 10
   idle_size: 2
 redis_prefix: "sab-"
+secret: ""
+engine: "http://127.0.0.1:8080"
 test: false
 ```
 
@@ -150,6 +152,8 @@ Notes:
 - `db`: MySQL connection string used by both `admin` and `engine`.
 - `redis.address`: Redis address used by the admin console for session storage and permission caching.
 - `redis_prefix`: set an isolated prefix for the current environment to avoid collisions with other environments.
+- `secret`: optional predefined signing secret. Leave it empty to keep the existing default behavior.
+- `engine`: engine base URL used by `admin` when proxying online verification and related requests. If empty, it defaults to `http://127.0.0.1:8080`.
 - `test`: when set to `true`, more detailed debugging features are enabled. This is not recommended in production.
 
 `engine/config.yaml`
@@ -178,6 +182,6 @@ The script checks whether Go and Node.js/npm build environments are available on
 When starting the services, it is recommended to run the built binaries directly:
 
 ```bash
-./bin/admin -config admin/config.yaml -port 8001 -ui-resource ./ui/dist -engine http://127.0.0.1:8080
+./bin/admin -config admin/config.yaml -port 8001 -ui-resource ./ui/dist
 ./bin/engine -config engine/config.yaml -port 8080
 ```

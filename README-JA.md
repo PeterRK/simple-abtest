@@ -144,6 +144,8 @@ redis:
   pool_size: 10
   idle_size: 2
 redis_prefix: "sab-"
+secret: ""
+engine: "http://127.0.0.1:8080"
 test: false
 ```
 
@@ -152,6 +154,8 @@ test: false
 - `db`: `admin` と `engine` が共用する MySQL 接続文字列です。
 - `redis.address`: 管理画面でセッションと権限キャッシュに使う Redis の接続先です。
 - `redis_prefix`: 環境ごとに異なる prefix を付けると、他環境との衝突を避けられます。
+- `secret`: 任意の事前定義署名シークレットです。空のままなら従来どおりの既定動作になります。
+- `engine`: `admin` がオンライン検証などのプロキシ要求で接続する `engine` のベース URL です。空の場合は `http://127.0.0.1:8080` が使われます。
 - `test`: `true` にすると追加のデバッグ機能が有効になります。本番では非推奨です。
 
 `engine/config.yaml`
@@ -180,6 +184,6 @@ interval_s: 300
 サービス起動時は、ビルド済みバイナリをそのまま利用する構成を推奨します:
 
 ```bash
-./bin/admin -config admin/config.yaml -port 8001 -ui-resource ./ui/dist -engine http://127.0.0.1:8080
+./bin/admin -config admin/config.yaml -port 8001 -ui-resource ./ui/dist
 ./bin/engine -config engine/config.yaml -port 8080
 ```
