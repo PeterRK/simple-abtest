@@ -10,6 +10,7 @@
 - Control de acceso por aplicación: varios usuarios pueden iniciar sesión y recibir permisos de solo lectura, edición o administración.
 - Segmentación por contexto: se pueden definir condiciones de filtro según el contexto de negocio para que solo entren las solicitudes que correspondan.
 - Validación: desde la consola se puede probar un `key` y su `context` para ver qué configuración y etiquetas devuelve el motor.
+- Resultados de experimento: desde la consola se pueden ver tendencias de métricas por grupo, con cálculo referencial de media, mejora con su intervalo y significatividad.
 - Forced hit por clave: un `key` concreto puede fijarse a un grupo para QA, debugging o validación dirigida.
 - Experimentos multicapa: un experimento puede tener varias `layers`; cada layer devuelve una configuración independiente.
 - Alineación de tráfico entre layers: los `segments` representan rangos de tráfico compartidos entre layers, no variantes de negocio.
@@ -23,11 +24,13 @@
 ![](images/detail-en.png)
 ### Página de validación
 ![](images/verify-en.png)
+### Página de resultados
+![](images/result-en.png)
 ### Notas
 - La consola no impone validaciones de exclusividad sobre nombres ni sobre `force_hit`. Si hay conflictos, el comportamiento puede ser ambiguo; conviene evitar solapamientos.
 - En experimentos largos, al redistribuir cuota de un grupo no predeterminado, el sistema rota buckets con el grupo por defecto sin cambiar el porcentaje efectivo del momento. Por eso, el grupo por defecto no siempre es el mejor grupo de control.
 - La validación llama directamente al servicio de decisión, así que los cambios hechos en la consola también tardan un poco en reflejarse allí.
-- La plataforma todavía no incluye visualización de resultados. Las etiquetas devueltas por el motor están pensadas para enlazar con tu stack analítico.
+- La mejora, su intervalo y la significatividad de la página de resultados se calculan sobre unidades coincidentes de igual peso y son solo una referencia.
 
 ## Componentes
 

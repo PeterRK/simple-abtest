@@ -225,9 +225,15 @@ func appIssueToken(w http.ResponseWriter, r *http.Request, p httprouter.Params) 
 	}
 
 	req := &struct {
-		TTL uint32 `json:"ttl_seconds"`
+		TTL          uint32   `json:"ttl_seconds"`
+		Capabilities []string `json:"capabilities,omitempty"`
 	}{}
 	if !getJsonArgsWithLog(ctx, w, r, req) {
+		return
+	}
+	capability, capabilityNames, ok := parseAppTokenCapabilities(req.Capabilities)
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	now := time.Now().Unix()
@@ -249,15 +255,51 @@ func appIssueToken(w http.ResponseWriter, r *http.Request, p httprouter.Params) 
 		return
 	}
 
+	const (
+		tokenVersionV1 uint8 = 1
+		tokenVersionV2 uint8 = 2
+	)
+
 	expireAt := uint32(expireAt64)
+	tokenVersion := tokenVersionV1
 	token := sign.BuildPublicToken(signingSecret, id, expireAt)
+	if capability != 0 {
+		var ok bool
+		token, ok = sign.BuildPublicTokenV2(signingSecret, id, expireAt, capability)
+		if !ok {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		tokenVersion = tokenVersionV2
+	}
 	utils.HttpReplyJsonWithLog(ctx.ContextLogger, w, http.StatusOK, &struct {
-		Token    string `json:"token"`
-		ExpireAt string `json:"expire_at"`
+		Token        string   `json:"token"`
+		ExpireAt     string   `json:"expire_at"`
+		TokenVersion uint8    `json:"token_version"`
+		Capabilities []string `json:"capabilities,omitempty"`
 	}{
-		Token:    token,
-		ExpireAt: time.Unix(expireAt64, 0).Format(time.DateTime),
+		Token:        token,
+		ExpireAt:     time.Unix(expireAt64, 0).Format(time.DateTime),
+		TokenVersion: tokenVersion,
+		Capabilities: capabilityNames,
 	})
+}
+
+func parseAppTokenCapabilities(capabilities []string) (uint32, []string, bool) {
+	var capability uint32
+	names := make([]string, 0, len(capabilities))
+	for _, name := range capabilities {
+		switch name {
+		case "result_write":
+			if capability&appTokenCapabilityResultWrite == 0 {
+				names = append(names, name)
+			}
+			capability |= appTokenCapabilityResultWrite
+		default:
+			return 0, nil, false
+		}
+	}
+	return capability, names, true
 }
 
 func appUpdate(w http.ResponseWriter, r *http.Request, p httprouter.Params) {

@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { Application, Experiment, Layer, Segment, Group, Config } from '@/types'
+import type { Application, Experiment, Layer, Segment, Group, Config, ResultOptions, ResultDataPoint } from '@/types'
 import type { ExprNode } from '@/types'
 import { clearSession } from '@/auth'
 
@@ -43,8 +43,8 @@ export const getApp = (id: number) => adminApi.get<Application>(`/app/${id}`)
 export const createApp = (data: { name: string; description?: string }) => adminApi.post<Application>('/app', data)
 export const updateApp = (id: number, data: { name: string; description?: string; version: number }) => adminApi.put<Application>(`/app/${id}`, data)
 export const deleteApp = (id: number, data: { version: number }) => adminApi.delete(`/app/${id}`, { data })
-export const issueAppToken = (id: number, data: { ttl_seconds: number }) =>
-  adminApi.post<{ token: string; expire_at: string }>(`/app/${id}/token`, data)
+export const issueAppToken = (id: number, data: { ttl_seconds: number; capabilities?: string[] }) =>
+  adminApi.post<{ token: string; expire_at: string; token_version: number; capabilities?: string[] }>(`/app/${id}/token`, data)
 export const getAppPrivileges = (id: number) =>
   adminApi.get<{ name: string; privilege: number; grantor: string }[]>(`/app/${id}/privilege`)
 export const grantAppPrivilege = (id: number, data: { name: string; privilege: number }) =>
@@ -84,6 +84,21 @@ export const getConfigs = (grpId: number, begin?: number) => adminApi.get<Config
 export const createConfig = (grpId: number, content: string) => adminApi.post<{ id: number; stamp?: string }>(`/grp/${grpId}/cfg`, content)
 export const getConfig = (grpId: number, cfgId: number) =>
   adminApi.get<string>(`/grp/${grpId}/cfg/${cfgId}`, { responseType: 'text' })
+
+// Experiment Result
+export const getExpResultOptions = (appId: number, expId: number) =>
+  adminApi.get<ResultOptions>(`/app/${appId}/exp/${expId}/result/options`)
+export const getExpResultData = (
+  appId: number,
+  expId: number,
+  params: {
+    layer_name: string
+    bucket_type: string
+    metric_name: string
+    begin_stamp: number
+    end_stamp: number
+  }
+) => adminApi.get<ResultDataPoint[]>(`/app/${appId}/exp/${expId}/result/data`, { params })
 
 // Engine
 export const verify = (data: { appid: number; key: string; context?: Record<string, string> }) =>

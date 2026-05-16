@@ -58,6 +58,27 @@ export interface Config {
   stamp?: string
 }
 
+export interface ResultOptionBucket {
+  name: string
+  metrics: string[]
+}
+
+export interface ResultOptionLayer {
+  name: string
+  bucket_types: ResultOptionBucket[]
+}
+
+export interface ResultOptions {
+  layers: ResultOptionLayer[]
+}
+
+export interface ResultDataPoint {
+  bucket_key: string
+  bucket_stamp: number
+  group_name: string
+  metric_value: number
+}
+
 export interface ExprNode {
   op: number
   dtype?: number

@@ -15,6 +15,11 @@ const router = createRouter({
       props: true
     },
     {
+      path: '/app/:appId/experiment/:expId/result',
+      name: 'ExperimentResult',
+      component: () => import('@/views/ExperimentResult.vue')
+    },
+    {
       path: '/verify',
       name: 'OnlineVerify',
       component: () => import('@/views/OnlineVerify.vue')

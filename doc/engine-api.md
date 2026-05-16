@@ -45,8 +45,10 @@ Required header:
 
 Notes:
 
-- current token format is `base64url(appid:uint32 | expire_ts:uint32 | hmac_sha256(payload)[:16])`.
+- V1 token format is `base64url(appid:uint32 | expire_ts:uint32 | hmac_sha256(payload)[:16])`.
+- V2 token format is `base64url(appid:uint32 | expire_ts:uint32 | capability:uint24 | hmac_sha256(payload)[:16])`.
 - `expire_ts` uses unix seconds and is checked by engine during verification.
+- all valid tokens can read engine APIs; `capability` is returned by the shared verifier for upper layers and is not interpreted by engine business logic.
 
 ### GET `/app/:id`
 

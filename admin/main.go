@@ -108,6 +108,7 @@ func Main() int {
 	bindSegOp(router)
 	bindGrpOp(router)
 	bindUserOp(router)
+	bindResultOp(router)
 	if err := bindSiteOp(router); err != nil {
 		fmt.Printf("fail to prepare site routes: %v\n", err)
 		return 1
@@ -150,6 +151,9 @@ func prepareSqls() error {
 		return err
 	}
 	if err := prepareUserSql(db); err != nil {
+		return err
+	}
+	if err := prepareResultSql(db); err != nil {
 		return err
 	}
 	if err := prepareAuthSql(db); err != nil {

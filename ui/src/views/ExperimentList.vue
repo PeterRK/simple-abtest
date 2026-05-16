@@ -8,6 +8,7 @@ import { useI18n } from '@/i18n'
 import { useAuth } from '@/auth'
 import { useRecentApp } from '@/composables/useRecentApp'
 import { getNameMaxLength, validateName } from '@/utils/name'
+import { TrendCharts } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -41,7 +42,7 @@ type AppSnapshot = {
 }
 
 const tokenDialogVisible = ref(false)
-const tokenForm = ref({ ttlDays: 1 })
+const tokenForm = ref({ ttlDays: 1, resultWrite: false })
 const tokenLoading = ref(false)
 const issuedToken = ref('')
 const issuedTokenExpireAt = ref('')
@@ -211,7 +212,7 @@ const showTokenDialog = () => {
   if (!currentApp.value) return
   issuedToken.value = ''
   issuedTokenExpireAt.value = ''
-  tokenForm.value.ttlDays = 1
+  tokenForm.value = { ttlDays: 1, resultWrite: false }
   tokenDialogVisible.value = true
 }
 
@@ -292,7 +293,8 @@ const handleIssueToken = async () => {
   tokenLoading.value = true
   try {
     const res = await issueAppToken(currentApp.value.id, {
-      ttl_seconds: Math.floor(tokenForm.value.ttlDays * 24 * 60 * 60)
+      ttl_seconds: Math.floor(tokenForm.value.ttlDays * 24 * 60 * 60),
+      capabilities: tokenForm.value.resultWrite ? ['result_write'] : undefined
     })
     issuedToken.value = res.data.token
     issuedTokenExpireAt.value = res.data.expire_at
@@ -438,6 +440,17 @@ const handleExpClick = (row: Experiment) => {
   router.push(`/experiment/${row.id}`)
 }
 
+const handleResultClick = (row: Experiment) => {
+  if (!selectedAppId.value) return
+  router.push({
+    name: 'ExperimentResult',
+    params: {
+      appId: selectedAppId.value,
+      expId: row.id
+    }
+  })
+}
+
 const handleSwitchChange = async (val: number | boolean | string, row: Experiment) => {
   const newStatus = val ? 1 : 0
   const previousStatus = experimentStatusMap.value.get(row.id)
@@ -548,6 +561,13 @@ watch(
           />
         </template>
       </el-table-column>
+      <el-table-column :label="t('result.resultColumn')" width="110">
+        <template #default="{ row }">
+          <el-button link type="primary" :icon="TrendCharts" @click.stop="handleResultClick(row)">
+            {{ t('result.resultAction') }}
+          </el-button>
+        </template>
+      </el-table-column>
     </el-table>
 
     <!-- App Dialog -->
@@ -608,6 +628,9 @@ watch(
       <el-form :model="tokenForm" label-width="110px">
         <el-form-item :label="t('token.ttlDays')">
           <el-input-number v-model="tokenForm.ttlDays" :min="1" :step="1" />
+        </el-form-item>
+        <el-form-item :label="t('token.capability')">
+          <el-checkbox v-model="tokenForm.resultWrite">{{ t('token.resultWrite') }}</el-checkbox>
         </el-form-item>
         <el-form-item :label="t('common.accessToken')">
           <div class="token-result">

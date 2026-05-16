@@ -22,6 +22,9 @@ const (
 	maxExpNameLen   = 32
 	maxLayerNameLen = 32
 	maxGroupNameLen = 32
+
+	appTokenCapabilityResultWrite uint32 = 1 << 0
+	appTokenCapabilityKnownMask          = appTokenCapabilityResultWrite
 )
 
 var validNamePattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)

@@ -56,7 +56,7 @@ Rules in current implementation:
     - group name: `32`
 - Common status codes:
   - `400 Bad Request`: invalid input
-  - `401 Unauthorized`: missing/invalid session or invalid password credential
+  - `401 Unauthorized`: missing/invalid session, invalid password credential, or invalid `ACCESS_TOKEN`
   - `403 Forbidden`: privilege denied or business rule denied
   - `404 Not Found`: resource missing (only on part of endpoints)
   - `409 Conflict`: version/business conflict
@@ -307,7 +307,10 @@ Notes:
 
 ### POST `/api/app/:id/token`
 
-Issue one short-lived public token for engine access.
+Issue one short-lived public token. Tokens without extra capabilities use the
+legacy read-only format and can read `engine`. Tokens with extra capabilities
+use the V2 format; all valid tokens can still read `engine`, while V2
+capabilities may grant additional permissions.
 
 Permission: app `admin`.
 
@@ -315,7 +318,8 @@ Request:
 
 ```json
 {
-  "ttl_seconds": 300
+  "ttl_seconds": 300,
+  "capabilities": ["result_write"]
 }
 ```
 
@@ -324,15 +328,23 @@ Response `200 OK`:
 ```json
 {
   "token": "<public-token>",
-  "expire_at": "2026-03-28 10:30:00"
+  "expire_at": "2026-03-28 10:30:00",
+  "token_version": 2,
+  "capabilities": ["result_write"]
 }
 ```
 
 Notes:
 
 - `ttl_seconds` must be positive.
+- `capabilities` is optional. Omit it or pass an empty array to issue a legacy
+  V1 token with no extended permissions.
+- supported capabilities:
+  - `result_write`: allow `POST /api/app/:id/exp/:eid/result`.
 - if the derived `expire_at` cannot fit into the token's uint32 unix-seconds field, server returns `400 Bad Request`.
 - returned `token` is a short-lived public token signed from the app's stored `access_token`; it is not the stored secret itself.
+- all valid tokens can be used as `ACCESS_TOKEN` for engine APIs.
+- only a V2 token with the `result_write` capability can be used for `POST /api/app/:id/exp/:eid/result`.
 
 ### DELETE `/api/app/:id`
 
@@ -392,6 +404,156 @@ Notes:
 - current implementation requires `appid` to be present in request body so admin can check app privilege before proxying.
 - admin signs a temporary 60-second public token internally, then calls engine with that token.
 - callers do not need to provide `ACCESS_TOKEN` when using this proxy endpoint.
+
+---
+
+## Experiment Result
+
+Experiment result data is written by external aggregation jobs and read by the admin result page.
+
+Result rows are keyed by:
+
+```text
+app_id + exp_id + layer_name + bucket_type + metric_name + bucket_key + group_name
+```
+
+`layer_name` and `group_name` match the runtime tag parts returned by engine (`layer:group`). `bucket_stamp` is an int64 sortable stamp used for range queries and for deriving the display order of `bucket_key` values. When it represents time, use Unix seconds.
+
+### POST `/api/app/:id/exp/:eid/result`
+
+Submit a batch of result points for one experiment.
+
+Authentication:
+
+- Requires `ACCESS_TOKEN` header.
+- The token is issued by `POST /api/app/:id/token` with
+  `"capabilities": ["result_write"]`.
+- No session cookie is required.
+
+Request:
+
+```json
+{
+  "layer_name": "feed_rank",
+  "bucket_type": "hour",
+  "metric_name": ["ctr", "conversion_rate"],
+  "points": [
+    {
+      "group_name": "control",
+      "bucket_key": "2026051413",
+      "bucket_stamp": 1778754000,
+      "metric_value": [0.123, 0.041]
+    },
+    {
+      "group_name": "variant_b",
+      "bucket_key": "2026051413",
+      "bucket_stamp": 1778754000,
+      "metric_value": [0.137, 0.046]
+    }
+  ]
+}
+```
+
+Response `200 OK`:
+
+```json
+{
+  "point_count": 2,
+  "metric_count": 2,
+  "row_count": 4
+}
+```
+
+Notes:
+
+- `app_id` and `exp_id` come from the path; the token must match `app_id`.
+- The write path stores `exp_id` from the path. It does not check whether the experiment exists or belongs to the app.
+- `layer_name` and `group_name` follow the common name validation rule, max length `32`.
+- `metric_name` contains one or more unique metric names. Each name allows `A-Z`, `a-z`, `0-9`, `_`, `-`, `.`, max length `128`.
+- Each point's `metric_value` array must have the same length and order as `metric_name`.
+- `bucket_key` allows `A-Z`, `a-z`, `0-9`, `_`, `-`, `.`, max length `64`.
+- `bucket_type` must be `hour`, `day`, or `custom`.
+- `points × metric_name` must expand to `1` to `10000` stored rows.
+- The endpoint uses `POST` because callers submit a batch to the result dataset. Storage behavior is still upsert: rows are keyed by `app_id + exp_id + layer_name + bucket_type + metric_name + bucket_key + group_name`.
+- Rewriting an existing key updates `bucket_stamp`, `metric_value`, and `update_time`, so retrying the same payload is idempotent for the affected result keys.
+
+### GET `/api/app/:id/exp/:eid/result/options`
+
+Get available result dimensions for an experiment.
+
+Permission:
+
+- app `read-only`
+
+Response `200 OK`:
+
+```json
+{
+  "layers": [
+    {
+      "name": "feed_rank",
+      "bucket_types": [
+        {
+          "name": "hour",
+          "metrics": ["ctr", "conversion_rate"]
+        }
+      ]
+    }
+  ]
+}
+```
+
+Notes:
+
+- Options are ordered by `layer_name`, then `bucket_type`, then `metric_name`.
+- Empty result sets return `"layers": []`.
+
+### GET `/api/app/:id/exp/:eid/result/data`
+
+Get chart data for one selected result dimension and bucket stamp range.
+
+Permission:
+
+- app `read-only`
+
+Query params:
+
+- `layer_name`: required
+- `bucket_type`: required, one of `hour`, `day`, `custom`
+- `metric_name`: required
+- `begin_stamp`: required int64, inclusive; use Unix seconds for time ranges
+- `end_stamp`: required int64, exclusive; use Unix seconds for time ranges
+
+Example:
+
+```http
+GET /api/app/1001/exp/2001/result/data?layer_name=feed_rank&bucket_type=hour&metric_name=ctr&begin_stamp=1778750000&end_stamp=1778840000
+```
+
+Response `200 OK`:
+
+```json
+[
+  {
+    "bucket_key": "2026051413",
+    "bucket_stamp": 1778754000,
+    "group_name": "control",
+    "metric_value": 0.123
+  },
+  {
+    "bucket_key": "2026051413",
+    "bucket_stamp": 1778754000,
+    "group_name": "variant_b",
+    "metric_value": 0.137
+  }
+]
+```
+
+Notes:
+
+- Rows are ordered by `bucket_stamp ASC`, `bucket_key ASC`, then `group_name ASC`.
+- The endpoint returns all groups for the selected layer, bucket type, metric, and stamp range.
+- The admin result page uses `bucket_key` as the chart x-axis label. `bucket_stamp` only determines the per-group bucket-key order; groups may contain partial bucket-key sequences, but their relative order must be mergeable into one non-duplicated sequence.
 
 ---
 

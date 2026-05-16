@@ -10,6 +10,7 @@
 - Access control: supports multi-user login and per-application roles, including read-only, read-write, and administrator.
 - Conditional targeting: define filter conditions based on business context so that only eligible requests enter an experiment.
 - Traffic Check: enter a key and context to inspect the hit result for easier debugging.
+- Experiment results: view group metric trends in the admin console, with reference calculations for mean, lift with its interval, and significance.
 - Forced targeting: route a specific key to a designated variant for testing and validation.
 - Advanced experiment flow: supports two-stage traffic allocation, multi-layer traffic pass-through, group traffic rotation, and configuration rollback for long-running experiments.
 - Flexible integration: use online APIs for real-time decisions or local SDKs to reduce request overhead.
@@ -21,11 +22,13 @@
 ![](images/detail-en.png)
 ### Traffic Check Page
 ![](images/verify-en.png)
+### Result Page
+![](images/result-en.png)
 ### Notes
 - The admin console currently does not enforce exclusivity checks for naming or forced-targeting rules. If conflicts occur, behavior is undefined, so please avoid overlapping configurations.
 - To mitigate traffic polarization in long-running experiments, when traffic is adjusted for a non-default group, its traffic slots are rotated with the default group while keeping the current traffic ratio unchanged. Because of this behavior, the default group is not always suitable as the control group, and a separate control group may be preferable.
 - Traffic Check calls the traffic allocation service directly, so changes made in the admin console take time to propagate there as well.
-- Data visualization is not implemented yet. Use the generated traffic tags in your existing analytics or visualization platform.
+- Lift, its interval, and significance on the result page are calculated from matched equally weighted units and are intended as reference only.
 
 ## Service Components
 

@@ -3,6 +3,14 @@ DELETE FROM experiment WHERE app_id NOT IN (
 	SELECT app_id FROM application
 );
 
+DELETE FROM exp_result WHERE app_id NOT IN (
+	SELECT app_id FROM application
+);
+
+DELETE FROM exp_result WHERE exp_id NOT IN (
+	SELECT exp_id FROM experiment
+);
+
 DELETE FROM exp_layer WHERE exp_id NOT IN (
 	SELECT exp_id FROM experiment
 );
