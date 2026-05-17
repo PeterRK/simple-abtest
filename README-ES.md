@@ -190,3 +190,19 @@ Para levantar los servicios se recomienda usar directamente los binarios compila
 ./bin/admin -config admin/config.yaml -port 8001 -ui-resource ./ui/dist
 ./bin/engine -config engine/config.yaml -port 8080
 ```
+
+## Recopilación de datos y estadísticas
+
+En un mismo escenario puede haber varios experimentos, mientras que las métricas de negocio que finalmente importan suelen ser bastante estables. El enfoque más simple y efectivo es incluir las etiquetas de experimento en los campos de contexto de los datos reportados. Pueden coexistir varias etiquetas y organizarse como un array. Al calcular las métricas de negocio, extrae esas etiquetas durante la agregación. Así, añadir o quitar etiquetas de experimento no afecta al flujo de estadísticas de datos y resulta más fácil automatizarlo. Calcular métricas por separado para cada experimento es un enfoque obsoleto.
+
+```SQL
+SELECT
+    SPLIT(tag, ':')[0] AS layer_name,
+    SPLIT(tag, ':')[1] AS group_name,
+    COUNT(*) AS pv,
+    COUNT(DISTINCT uid) AS uv,
+    pt
+FROM your_table
+LATERAL VIEW EXPLODE(tags) AS tag
+GROUP BY pt, tag;
+```

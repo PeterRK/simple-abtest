@@ -188,3 +188,18 @@ interval_s: 300
 ./bin/admin -config admin/config.yaml -port 8001 -ui-resource ./ui/dist
 ./bin/engine -config engine/config.yaml -port 8080
 ```
+
+## 数据的收集与统计
+
+考虑到一个场景可能会有多种实验，而最终关心的业务指标往往比较固定，最简单有效的办法是将实验标签放到上报数据的上下文字段中（可以同时存在多个，用数组组织），然后在统计业务指标时将标签解出来。这样的话，实验标签的增减不影响数据统计流程，便于将统计流程自动化。单独为每个实验进行指标统计是落后的办法。
+```SQL
+SELECT
+    SPLIT(tag, ':')[0] AS layer_name,
+    SPLIT(tag, ':')[1] AS group_name,
+    COUNT(*) AS pv,
+    COUNT(DISTINCT uid) AS uv,
+    pt
+FROM your_table
+LATERAL VIEW EXPLODE(tags) AS tag
+GROUP BY pt, tag;
+```

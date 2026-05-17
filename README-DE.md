@@ -190,3 +190,19 @@ Fur den Start der Dienste empfiehlt es sich, die gebauten Binardateien direkt zu
 ./bin/admin -config admin/config.yaml -port 8001 -ui-resource ./ui/dist
 ./bin/engine -config engine/config.yaml -port 8080
 ```
+
+## Datenerfassung und Statistik
+
+In einem Szenario kann es mehrere Experimente geben, wahrend die letztlich relevanten Geschaftsmetriken meist relativ stabil bleiben. Der einfachste und effektivste Ansatz ist, Experiment-Tags in den Kontextfeldern der gemeldeten Daten abzulegen. Mehrere Tags konnen gleichzeitig vorhanden sein und als Array organisiert werden. Bei der Berechnung der Geschaftsmetriken werden diese Tags wahrend der Aggregation extrahiert. So wirken sich hinzugefugte oder entfernte Experiment-Tags nicht auf den Statistikprozess aus, was dessen Automatisierung erleichtert. Metriken separat fur jedes Experiment zu berechnen, ist ein veralteter Ansatz.
+
+```SQL
+SELECT
+    SPLIT(tag, ':')[0] AS layer_name,
+    SPLIT(tag, ':')[1] AS group_name,
+    COUNT(*) AS pv,
+    COUNT(DISTINCT uid) AS uv,
+    pt
+FROM your_table
+LATERAL VIEW EXPLODE(tags) AS tag
+GROUP BY pt, tag;
+```

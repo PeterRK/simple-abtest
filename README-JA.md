@@ -190,3 +190,19 @@ interval_s: 300
 ./bin/admin -config admin/config.yaml -port 8001 -ui-resource ./ui/dist
 ./bin/engine -config engine/config.yaml -port 8080
 ```
+
+## データ収集と統計
+
+1 つのシナリオに複数の実験が存在することがありますが、最終的に見たいビジネス指標は比較的固定されていることが多いです。最もシンプルで効果的な方法は、実験タグをレポートデータのコンテキストフィールドに入れることです。複数のタグを同時に持たせ、配列として整理できます。ビジネス指標を集計するときに、そのタグを展開して利用します。これにより、実験タグの追加や削除がデータ集計フローに影響せず、集計処理を自動化しやすくなります。実験ごとに個別に指標を集計する方法は時代遅れです。
+
+```SQL
+SELECT
+    SPLIT(tag, ':')[0] AS layer_name,
+    SPLIT(tag, ':')[1] AS group_name,
+    COUNT(*) AS pv,
+    COUNT(DISTINCT uid) AS uv,
+    pt
+FROM your_table
+LATERAL VIEW EXPLODE(tags) AS tag
+GROUP BY pt, tag;
+```

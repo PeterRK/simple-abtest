@@ -190,3 +190,19 @@ Pour lancer les services, il est recommandé d’utiliser directement les binair
 ./bin/admin -config admin/config.yaml -port 8001 -ui-resource ./ui/dist
 ./bin/engine -config engine/config.yaml -port 8080
 ```
+
+## Collecte des données et statistiques
+
+Dans un même scénario, plusieurs expérimentations peuvent coexister, tandis que les métriques métier réellement suivies restent souvent assez stables. L’approche la plus simple et la plus efficace consiste à placer les tags d’expérimentation dans les champs de contexte des données remontées. Plusieurs tags peuvent coexister et être organisés sous forme de tableau. Lors du calcul des métriques métier, il suffit d’extraire ces tags pendant l’agrégation. Ainsi, l’ajout ou le retrait de tags d’expérimentation n’affecte pas le pipeline de statistiques, ce qui facilite son automatisation. Calculer les métriques séparément pour chaque expérimentation est une approche dépassée.
+
+```SQL
+SELECT
+    SPLIT(tag, ':')[0] AS layer_name,
+    SPLIT(tag, ':')[1] AS group_name,
+    COUNT(*) AS pv,
+    COUNT(DISTINCT uid) AS uv,
+    pt
+FROM your_table
+LATERAL VIEW EXPLODE(tags) AS tag
+GROUP BY pt, tag;
+```

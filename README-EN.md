@@ -188,3 +188,19 @@ When starting the services, it is recommended to run the built binaries directly
 ./bin/admin -config admin/config.yaml -port 8001 -ui-resource ./ui/dist
 ./bin/engine -config engine/config.yaml -port 8080
 ```
+
+## Data Collection and Statistics
+
+In one scenario, there may be multiple experiments, while the business metrics you ultimately care about are usually relatively stable. The simplest and most effective approach is to put experiment tags into the context fields of reported data. Multiple tags can coexist and can be organized as an array. When calculating business metrics, extract the tags during aggregation. This way, adding or removing experiment tags does not affect the data statistics pipeline, making it easier to automate. Calculating metrics separately for each experiment is an outdated approach.
+
+```SQL
+SELECT
+    SPLIT(tag, ':')[0] AS layer_name,
+    SPLIT(tag, ':')[1] AS group_name,
+    COUNT(*) AS pv,
+    COUNT(DISTINCT uid) AS uv,
+    pt
+FROM your_table
+LATERAL VIEW EXPLODE(tags) AS tag
+GROUP BY pt, tag;
+```
