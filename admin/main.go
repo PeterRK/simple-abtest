@@ -41,6 +41,25 @@ func Main() int {
 		RedisPrefix string            `yaml:"redis_prefix"`
 		Secret      string            `yaml:"secret"`
 		Engine      string            `yaml:"engine"`
+		Auth        struct {
+			SessionTTLMinutes        int `yaml:"session_ttl_minutes"`
+			PrivilegeCacheTTLMinutes int `yaml:"privilege_cache_ttl_minutes"`
+			RelationCacheTTLDays     int `yaml:"relation_cache_ttl_days"`
+		} `yaml:"auth"`
+		RateLimit struct {
+			Login struct {
+				Limit         int `yaml:"limit"`
+				WindowMinutes int `yaml:"window_minutes"`
+			} `yaml:"login"`
+			UserUpdate struct {
+				Limit         int `yaml:"limit"`
+				WindowMinutes int `yaml:"window_minutes"`
+			} `yaml:"user_update"`
+			UserDelete struct {
+				Limit         int `yaml:"limit"`
+				WindowMinutes int `yaml:"window_minutes"`
+			} `yaml:"user_delete"`
+		} `yaml:"rate_limit"`
 	}{}
 
 	err := utils.LoadYamlFile(cfgPath, &config)
@@ -53,6 +72,33 @@ func Main() int {
 	if len(engineUrl) == 0 {
 		engineUrl = "http://127.0.0.1:8080"
 	}
+
+	if config.Auth.SessionTTLMinutes > 0 &&
+		config.Auth.SessionTTLMinutes <= 7*24*60 {
+		sessionTTL = time.Duration(config.Auth.SessionTTLMinutes) * time.Minute
+	}
+	if config.Auth.PrivilegeCacheTTLMinutes > 0 &&
+		config.Auth.PrivilegeCacheTTLMinutes <= 240 {
+		privCacheTTL = time.Duration(config.Auth.PrivilegeCacheTTLMinutes) * time.Minute
+	}
+	if config.Auth.RelationCacheTTLDays > 0 &&
+		config.Auth.RelationCacheTTLDays <= 90 {
+		relationTTL = uint32(config.Auth.RelationCacheTTLDays * 24 * 60 * 60)
+	}
+
+	applyRateLimitRuleConfig := func(rule *rateLimitRule, limit, windowMinutes int) {
+		if limit > 0 && limit <= 1000 &&
+			windowMinutes > 0 && windowMinutes <= 24*60 {
+			rule.limit = int64(limit)
+			rule.window = time.Duration(windowMinutes) * time.Minute
+		}
+	}
+	applyRateLimitRuleConfig(&loginRateLimitByAccount,
+		config.RateLimit.Login.Limit, config.RateLimit.Login.WindowMinutes)
+	applyRateLimitRuleConfig(&updateRateLimitByUser,
+		config.RateLimit.UserUpdate.Limit, config.RateLimit.UserUpdate.WindowMinutes)
+	applyRateLimitRuleConfig(&deleteRateLimitByUser,
+		config.RateLimit.UserDelete.Limit, config.RateLimit.UserDelete.WindowMinutes)
 
 	if len(config.Redis.Address) == 0 {
 		fmt.Println("redis is unspecified")

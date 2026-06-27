@@ -149,6 +149,20 @@ redis:
 redis_prefix: "sab-"
 secret: ""
 engine: "http://127.0.0.1:8080"
+auth:
+  session_ttl_minutes: 30
+  privilege_cache_ttl_minutes: 10
+  relation_cache_ttl_days: 7
+rate_limit:
+  login:
+    limit: 8
+    window_minutes: 10
+  user_update:
+    limit: 5
+    window_minutes: 15
+  user_delete:
+    limit: 3
+    window_minutes: 30
 test: false
 ```
 
@@ -159,6 +173,8 @@ test: false
 - `redis_prefix`: 環境ごとに異なる prefix を付けると、他環境との衝突を避けられます。
 - `secret`: 任意の事前定義署名シークレットです。空のままなら従来どおりの既定動作になります。
 - `engine`: `admin` がオンライン検証などのプロキシ要求で接続する `engine` のベース URL です。空の場合は `http://127.0.0.1:8080` が使われます。
+- `auth`: セッションと権限キャッシュの TTL を任意で設定できます。未指定または不正な値は組み込み既定値になります。有効範囲は `session_ttl_minutes` が `1..10080`、`privilege_cache_ttl_minutes` が `1..240`、`relation_cache_ttl_days` が `1..90` です。
+- `rate_limit`: ログイン、ユーザー更新、ユーザー削除の制限を任意で設定できます。各ルールは `limit` と `window_minutes` の両方が有効な場合だけ組み込み既定値を上書きします。有効範囲は `limit` が `1..1000`、`window_minutes` が `1..1440` です。
 - `test`: `true` にすると追加のデバッグ機能が有効になります。本番では非推奨です。
 
 `engine/config.yaml`

@@ -147,6 +147,20 @@ redis:
 redis_prefix: "sab-"
 secret: ""
 engine: "http://127.0.0.1:8080"
+auth:
+  session_ttl_minutes: 30
+  privilege_cache_ttl_minutes: 10
+  relation_cache_ttl_days: 7
+rate_limit:
+  login:
+    limit: 8
+    window_minutes: 10
+  user_update:
+    limit: 5
+    window_minutes: 15
+  user_delete:
+    limit: 3
+    window_minutes: 30
 test: false
 ```
 
@@ -157,6 +171,8 @@ test: false
 - `redis_prefix`：建议为当前环境设置独立前缀，避免和其他环境混用。
 - `secret`：可选的预置签名密钥。留空时由系统按现有逻辑处理。
 - `engine`：`admin` 代理在线验证等请求时访问的引擎地址；留空时默认使用 `http://127.0.0.1:8080`。
+- `auth`：可选的认证与权限缓存时长配置；字段缺失或配置值非法时使用内置默认值。合法范围：`session_ttl_minutes` 为 `1..10080`，`privilege_cache_ttl_minutes` 为 `1..240`，`relation_cache_ttl_days` 为 `1..90`。
+- `rate_limit`：可选的登录、用户修改、用户删除限流配置；每条规则的 `limit` 和 `window_minutes` 都合法时才会覆盖内置默认值。合法范围：`limit` 为 `1..1000`，`window_minutes` 为 `1..1440`。
 - `test`：设为 `true` 时会打开更详细的调试能力，不建议生产环境开启。
 
 `engine/config.yaml`

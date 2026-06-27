@@ -13,12 +13,14 @@ import (
 )
 
 const (
+	sessionUidCookieName   = "SESSION_UID"
+	sessionTokenCookieName = "SESSION_TOKEN"
+)
+
+var (
 	sessionTTL   = 30 * time.Minute
 	privCacheTTL = 10 * time.Minute
 	relationTTL  = uint32((24*time.Hour)/time.Second) * 7
-
-	sessionUidCookieName   = "SESSION_UID"
-	sessionTokenCookieName = "SESSION_TOKEN"
 )
 
 var authSql struct {

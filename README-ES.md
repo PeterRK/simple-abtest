@@ -149,6 +149,20 @@ redis:
 redis_prefix: "sab-"
 secret: ""
 engine: "http://127.0.0.1:8080"
+auth:
+  session_ttl_minutes: 30
+  privilege_cache_ttl_minutes: 10
+  relation_cache_ttl_days: 7
+rate_limit:
+  login:
+    limit: 8
+    window_minutes: 10
+  user_update:
+    limit: 5
+    window_minutes: 15
+  user_delete:
+    limit: 3
+    window_minutes: 30
 test: false
 ```
 
@@ -159,6 +173,8 @@ Notas:
 - `redis_prefix`: conviene definir un prefijo distinto por entorno para evitar colisiones.
 - `secret`: secreto de firma predefinido opcional. Déjalo vacío para conservar el comportamiento por defecto actual.
 - `engine`: dirección base de `engine` que usa `admin` al reenviar verificaciones online y solicitudes relacionadas. Si queda vacío, se usa `http://127.0.0.1:8080`.
+- `auth`: configuración TTL opcional para sesiones y caché de permisos. Los campos ausentes o valores inválidos usan los valores por defecto incorporados. Rangos válidos: `session_ttl_minutes` es `1..10080`, `privilege_cache_ttl_minutes` es `1..240`, `relation_cache_ttl_days` es `1..90`.
+- `rate_limit`: límites opcionales para login, actualización de usuarios y eliminación de usuarios. Una regla solo reemplaza el valor por defecto incorporado cuando `limit` y `window_minutes` son válidos. Rangos válidos: `limit` es `1..1000`, `window_minutes` es `1..1440`.
 - `test`: con `true` se activan capacidades adicionales de depuración; no se recomienda en producción.
 
 `engine/config.yaml`
