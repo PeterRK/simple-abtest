@@ -71,7 +71,9 @@ bool ParseExperimentsJson(const std::string& payload,
                           std::string* error) {
   proto::ExperimentList exps_msg;
   std::string wrapped = "{\"items\":" + payload + "}";
-  auto status = google::protobuf::util::JsonStringToMessage(wrapped, &exps_msg);
+  google::protobuf::util::JsonParseOptions options;
+  options.ignore_unknown_fields = true;
+  auto status = google::protobuf::util::JsonStringToMessage(wrapped, &exps_msg, options);
   if (!status.ok()) {
     if (error != nullptr) {
       *error = "invalid experiment payload: " + std::string(status.message());
