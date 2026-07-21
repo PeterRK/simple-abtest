@@ -1,0 +1,27 @@
+name: C++ SDK CI
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cpp-sdk-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install dependencies
+        run: >-
+          sudo apt-get update && sudo apt-get install -y
+          cmake ninja-build g++
+          libcurl4-openssl-dev zlib1g-dev
+          libprotobuf-dev protobuf-compiler libgtest-dev
+      - run: cmake -S sdk-cpp -B build/sdk-cpp -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build/sdk-cpp
+      - run: ctest --test-dir build/sdk-cpp --output-on-failure

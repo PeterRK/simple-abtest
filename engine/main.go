@@ -11,6 +11,7 @@ import (
 	"net/http/pprof"
 	"os"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/julienschmidt/httprouter"
@@ -96,11 +97,12 @@ func Main() int {
 		return apps, nil
 	}
 
-	applications, err = fetch()
+	apps, err := fetch()
 	if err != nil {
 		fmt.Printf("fail to get data: %v\n", err)
 		return -1
 	}
+	current.Store(&snapshot{apps: apps})
 
 	if config.IntervalS == 0 {
 		config.IntervalS = 300
@@ -123,7 +125,7 @@ func Main() int {
 					utils.GetLogger().Info("recover")
 				}
 				failing = false
-				applications = apps
+				current.Store(&snapshot{apps: apps})
 			}
 		}
 	}()
@@ -175,11 +177,11 @@ type Application struct {
 	pack []byte // gzipped
 }
 
-var (
-	// map is a descriptor over runtime-managed storage rather than an inline container.
-	// Refresh always rebuilds a brand-new map and replaces the whole value at once.
-	applications map[uint32]*Application
-)
+type snapshot struct {
+	apps map[uint32]*Application
+}
+
+var current atomic.Pointer[snapshot]
 
 func abtest(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	req := &struct {
@@ -195,7 +197,12 @@ func abtest(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		return
 	}
 
-	app := applications[req.AppId]
+	snap := current.Load()
+	if snap == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+	app := snap.apps[req.AppId]
 	if app == nil {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -221,7 +228,12 @@ func fetchAppInfo(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	app := applications[uint32(id)]
+	snap := current.Load()
+	if snap == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+	app := snap.apps[uint32(id)]
 	if app == nil {
 		w.WriteHeader(http.StatusNotFound)
 		return
